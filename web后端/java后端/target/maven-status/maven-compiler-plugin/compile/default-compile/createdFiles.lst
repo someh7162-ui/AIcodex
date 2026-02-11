@@ -1,0 +1,8 @@
+com\example\demo\DemoApplication.class
+com\example\demo\User.class
+com\example\demo\AuthController.class
+com\example\demo\LoginResponse.class
+com\example\demo\CorsConfig.class
+com\example\demo\RegisterRequest.class
+com\example\demo\CorsConfig$1.class
+com\example\demo\UserService.class

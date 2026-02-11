@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的课表 - 课程管理系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 我的课表</h1>
+            <p class="subtitle">轻松管理你的课程安排</p>
+        </header>
+
+        <div class="toolbar">
+            <button id="addCourseBtn" class="btn btn-primary">➕ 添加课程</button>
+            <button id="exportExcelBtn" class="btn btn-success">📊 导出Excel</button>
+            <button id="exportIcsBtn" class="btn btn-success">📅 导出日历</button>
+            <button id="printBtn" class="btn btn-info">🖨️ 打印课表</button>
+            <button id="clearAllBtn" class="btn btn-danger">🗑️ 清空课表</button>
+        </div>
+
+        <div class="schedule-container">
+            <table id="scheduleTable" class="schedule-table">
+                <thead>
+                    <tr>
+                        <th class="time-col">时间/星期</th>
+                        <th>周一</th>
+                        <th>周二</th>
+                        <th>周三</th>
+                        <th>周四</th>
+                        <th>周五</th>
+                        <th>周六</th>
+                        <th>周日</th>
+                    </tr>
+                </thead>
+                <tbody id="scheduleBody">
+                    <!-- 课表将动态生成 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="courseModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>添加/编辑课程</h2>
+                <form id="courseForm">
+                    <div class="form-group">
+                        <label for="courseName">课程名称：</label>
+                        <input type="text" id="courseName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="teacher">任课教师：</label>
+                        <input type="text" id="teacher" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">上课地点：</label>
+                        <input type="text" id="location" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dayOfWeek">星期：</label>
+                            <select id="dayOfWeek" required>
+                                <option value="1">周一</option>
+                                <option value="2">周二</option>
+                                <option value="3">周三</option>
+                                <option value="4">周四</option>
+                                <option value="5">周五</option>
+                                <option value="6">周六</option>
+                                <option value="7">周日</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="timeSlot">节次：</label>
+                            <select id="timeSlot" required>
+                                <option value="1">第1-2节 (08:00-09:40)</option>
+                                <option value="2">第3-4节 (10:00-11:40)</option>
+                                <option value="3">第5-6节 (14:00-15:40)</option>
+                                <option value="4">第7-8节 (16:00-17:40)</option>
+                                <option value="5">第9-10节 (19:00-20:40)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="startWeek">开始周：</label>
+                            <input type="number" id="startWeek" min="1" max="30" value="1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="endWeek">结束周：</label>
+                            <input type="number" id="endWeek" min="1" max="30" value="18" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="weeks">周次（留空为每周）：</label>
+                        <input type="text" id="weeks" placeholder="例如: 1,3,5,7-10 或 单周/双周">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">保存</button>
+                        <button type="button" class="btn btn-secondary" id="cancelBtn">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="courseDetailModal" class="modal">
+            <div class="modal-content">
+                <span class="close-detail">&times;</span>
+                <h2 id="detailCourseName"></h2>
+                <div class="course-detail">
+                    <p><strong>任课教师：</strong><span id="detailTeacher"></span></p>
+                    <p><strong>上课地点：</strong><span id="detailLocation"></span></p>
+                    <p><strong>上课时间：</strong><span id="detailTime"></span></p>
+                    <p><strong>周次范围：</strong><span id="detailWeeks"></span></p>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-warning" id="editCourseBtn">编辑</button>
+                    <button class="btn btn-danger" id="deleteCourseBtn">删除</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-panel">
+            <h3>学期设置</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="semesterStart">学期开始日期：</label>
+                    <input type="date" id="semesterStart">
+                </div>
+                <button class="btn btn-secondary" id="saveSemesterBtn">保存学期设置</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

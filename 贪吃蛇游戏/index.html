@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贪吃蛇游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        .game-container {
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px #00ff88;
+            color: #00ff88;
+        }
+
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .menu-btn {
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .btn-level {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #1a1a2e;
+        }
+
+        .btn-endless {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+            color: white;
+        }
+
+        .menu-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .game-area {
+            display: none;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .game-info {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .info-item {
+            font-size: 1.1rem;
+        }
+
+        .info-item span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .progress-container {
+            width: 200px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        #gameCanvas {
+            border: 3px solid #00ff88;
+            border-radius: 10px;
+            background: #0a0a15;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-back {
+            margin-top: 15px;
+            padding: 10px 30px;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-back:hover {
+            background: white;
+            color: #1a1a2e;
+        }
+
+        .game-over-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid #00ff88;
+            box-shadow: 0 0 50px rgba(0, 255, 136, 0.5);
+        }
+
+        .modal-content h2 {
+            font-size: 2rem;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+
+        .modal-content.level-complete h2 {
+            color: #00ff88;
+        }
+
+        .modal-content p {
+            font-size: 1.3rem;
+            margin-bottom: 30px;
+        }
+
+        .modal-content p span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .modal-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn-restart {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #1a1a2e;
+        }
+
+        .btn-menu {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-next {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: #1a1a2e;
+        }
+
+        .level-select {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .level-select h2 {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            color: #00ff88;
+        }
+
+        .levels-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .level-btn {
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #1a1a2e;
+        }
+
+        .level-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+
+        .level-btn.locked {
+            background: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.5);
+            cursor: not-allowed;
+        }
+
+        .portal {
+            animation: portalPulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes portalPulse {
+            from {
+                box-shadow: 0 0 10px #4facfe;
+            }
+            to {
+                box-shadow: 0 0 30px #00f2fe;
+            }
+        }
+
+        .controls-hint {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .controls-hint kbd {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- 主菜单 -->
+        <div class="menu" id="mainMenu">
+            <h1>贪吃蛇</h1>
+            <button class="menu-btn btn-level" onclick="showLevelSelect()">关卡模式</button>
+            <button class="menu-btn btn-endless" onclick="startEndlessMode()">无尽模式</button>
+            <div class="controls-hint">
+                使用 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或 <kbd>方向键</kbd> 控制方向
+            </div>
+        </div>
+
+        <!-- 关卡选择 -->
+        <div class="level-select" id="levelSelect">
+            <h2>选择关卡</h2>
+            <div class="levels-grid" id="levelsGrid"></div>
+            <button class="btn-back" onclick="showMainMenu()">返回主菜单</button>
+        </div>
+
+        <!-- 游戏区域 -->
+        <div class="game-area" id="gameArea">
+            <div class="game-header">
+                <div class="game-info">
+                    <div class="info-item" id="modeInfo">关卡: <span id="levelNum">1</span></div>
+                    <div class="info-item">得分: <span id="score">0</span></div>
+                    <div class="info-item" id="progressInfo">
+                        进度: 
+                        <div class="progress-container">
+                            <div class="progress-bar" id="progressBar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <canvas id="gameCanvas" width="600" height="600"></canvas>
+            <button class="btn-back" onclick="backToMenu()">返回菜单</button>
+        </div>
+
+        <!-- 游戏结束/过关弹窗 -->
+        <div class="game-over-modal" id="gameModal">
+            <div class="modal-content" id="modalContent">
+                <h2 id="modalTitle">游戏结束</h2>
+                <p id="modalMessage">得分: <span id="finalScore">0</span></p>
+                <div class="modal-buttons" id="modalButtons">
+                    <button class="modal-btn btn-restart" onclick="restartGame()">重新开始</button>
+                    <button class="modal-btn btn-menu" onclick="backToMenu()">返回菜单</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 游戏配置
+        const CANVAS_SIZE = 600;
+        const GRID_SIZE = 20;
+        const CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
+        const TOTAL_LEVELS = 10;
+
+        // 游戏状态
+        let canvas, ctx;
+        let snake = [];
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let food = null;
+        let portal = null;
+        let score = 0;
+        let progress = 0;
+        let currentLevel = 1;
+        let gameMode = 'level'; // 'level' or 'endless'
+        let gameLoop = null;
+        let gameSpeed = 150;
+        let unlockedLevels = 1;
+        let portalActive = false;
+        let obstacles = [];
+
+        // 关卡配置
+        const levelConfigs = [
+            { target: 5, speed: 150, obstacles: 0 },
+            { target: 7, speed: 140, obstacles: 2 },
+            { target: 8, speed: 130, obstacles: 4 },
+            { target: 10, speed: 120, obstacles: 6 },
+            { target: 12, speed: 110, obstacles: 8 },
+            { target: 14, speed: 100, obstacles: 10 },
+            { target: 16, speed: 95, obstacles: 12 },
+            { target: 18, speed: 90, obstacles: 14 },
+            { target: 20, speed: 85, obstacles: 16 },
+            { target: 25, speed: 80, obstacles: 18 }
+        ];
+
+        // 初始化
+        window.onload = function() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            loadProgress();
+            generateLevelButtons();
+            document.addEventListener('keydown', handleKeyDown);
+        };
+
+        // 保存/加载进度
+        function saveProgress() {
+            localStorage.setItem('snakeUnlockedLevels', unlockedLevels);
+        }
+
+        function loadProgress() {
+            const saved = localStorage.getItem('snakeUnlockedLevels');
+            if (saved) {
+                unlockedLevels = parseInt(saved);
+            }
+        }
+
+        // 生成关卡按钮
+        function generateLevelButtons() {
+            const grid = document.getElementById('levelsGrid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= TOTAL_LEVELS; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'level-btn' + (i > unlockedLevels ? ' locked' : '');
+                btn.textContent = i;
+                if (i <= unlockedLevels) {
+                    btn.onclick = () => startLevelMode(i);
+                }
+                grid.appendChild(btn);
+            }
+        }
+
+        // 显示/隐藏界面
+        function showMainMenu() {
+            stopGame();
+            document.getElementById('mainMenu').style.display = 'flex';
+            document.getElementById('levelSelect').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'none';
+            document.getElementById('gameModal').style.display = 'none';
+        }
+
+        function showLevelSelect() {
+            generateLevelButtons();
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('levelSelect').style.display = 'flex';
+        }
+
+        function showGameArea() {
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('levelSelect').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'block';
+        }
+
+        function backToMenu() {
+            stopGame();
+            showMainMenu();
+        }
+
+        // 开始关卡模式
+        function startLevelMode(level) {
+            gameMode = 'level';
+            currentLevel = level;
+            const config = levelConfigs[level - 1];
+            gameSpeed = config.speed;
+            
+            document.getElementById('modeInfo').innerHTML = '关卡: <span id="levelNum">' + level + '</span>';
+            document.getElementById('progressInfo').style.display = 'block';
+            
+            showGameArea();
+            initGame();
+        }
+
+        // 开始无尽模式
+        function startEndlessMode() {
+            gameMode = 'endless';
+            gameSpeed = 120;
+            
+            document.getElementById('modeInfo').innerHTML = '模式: <span>无尽</span>';
+            document.getElementById('progressInfo').style.display = 'none';
+            
+            showGameArea();
+            initGame();
+        }
+
+        // 初始化游戏
+        function initGame() {
+            // 初始化蛇
+            snake = [
+                { x: 5, y: 10 },
+                { x: 4, y: 10 },
+                { x: 3, y: 10 }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            progress = 0;
+            portal = null;
+            portalActive = false;
+            obstacles = [];
+
+            // 生成障碍物
+            if (gameMode === 'level') {
+                const config = levelConfigs[currentLevel - 1];
+                generateObstacles(config.obstacles);
+            }
+
+            updateScore();
+            updateProgress();
+            spawnFood();
+            
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(gameUpdate, gameSpeed);
+        }
+
+        // 生成障碍物
+        function generateObstacles(count) {
+            obstacles = [];
+            for (let i = 0; i < count; i++) {
+                let pos;
+                do {
+                    pos = {
+                        x: Math.floor(Math.random() * GRID_SIZE),
+                        y: Math.floor(Math.random() * GRID_SIZE)
+                    };
+                } while (
+                    isSnakeAt(pos.x, pos.y) ||
+                    isObstacleAt(pos.x, pos.y) ||
+                    (pos.x < 8 && pos.y === 10) // 避免起始位置
+                );
+                obstacles.push(pos);
+            }
+        }
+
+        function isObstacleAt(x, y) {
+            return obstacles.some(o => o.x === x && o.y === y);
+        }
+
+        // 游戏更新
+        function gameUpdate() {
+            direction = { ...nextDirection };
+            
+            // 计算新头部位置
+            const head = { ...snake[0] };
+            head.x += direction.x;
+            head.y += direction.y;
+
+            // 边界检测（穿墙）
+            if (head.x < 0) head.x = GRID_SIZE - 1;
+            if (head.x >= GRID_SIZE) head.x = 0;
+            if (head.y < 0) head.y = GRID_SIZE - 1;
+            if (head.y >= GRID_SIZE) head.y = 0;
+
+            // 碰撞检测
+            if (isSnakeAt(head.x, head.y) || isObstacleAt(head.x, head.y)) {
+                gameOver();
+                return;
+            }
+
+            // 检测传送门
+            if (portalActive && portal && head.x === portal.x && head.y === portal.y) {
+                levelComplete();
+                return;
+            }
+
+            // 移动蛇
+            snake.unshift(head);
+
+            // 吃食物
+            if (food && head.x === food.x && head.y === food.y) {
+                score += 10;
+                updateScore();
+                
+                if (gameMode === 'level') {
+                    progress++;
+                    updateProgress();
+                    
+                    const config = levelConfigs[currentLevel - 1];
+                    if (progress >= config.target && !portalActive) {
+                        spawnPortal();
+                    } else if (!portalActive) {
+                        spawnFood();
+                    }
+                } else {
+                    // 无尽模式：逐渐加速
+                    if (score % 50 === 0 && gameSpeed > 60) {
+                        gameSpeed -= 5;
+                        clearInterval(gameLoop);
+                        gameLoop = setInterval(gameUpdate, gameSpeed);
+                    }
+                    spawnFood();
+                }
+            } else {
+                snake.pop();
+            }
+
+            draw();
+        }
+
+        function isSnakeAt(x, y) {
+            return snake.some(s => s.x === x && s.y === y);
+        }
+
+        // 生成食物
+        function spawnFood() {
+            let pos;
+            do {
+                pos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+            } while (
+                isSnakeAt(pos.x, pos.y) ||
+                isObstacleAt(pos.x, pos.y) ||
+                (portal && pos.x === portal.x && pos.y === portal.y)
+            );
+            food = pos;
+        }
+
+        // 生成传送门
+        function spawnPortal() {
+            food = null;
+            let pos;
+            do {
+                pos = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+            } while (isSnakeAt(pos.x, pos.y) || isObstacleAt(pos.x, pos.y));
+            portal = pos;
+            portalActive = true;
+        }
+
+        // 绘制
+        function draw() {
+            // 清空画布
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+            // 绘制网格
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_SIZE, 0);
+                ctx.lineTo(i * CELL_SIZE, CANVAS_SIZE);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_SIZE);
+                ctx.lineTo(CANVAS_SIZE, i * CELL_SIZE);
+                ctx.stroke();
+            }
+
+            // 绘制障碍物
+            obstacles.forEach(o => {
+                ctx.fillStyle = '#444';
+                ctx.fillRect(
+                    o.x * CELL_SIZE + 2,
+                    o.y * CELL_SIZE + 2,
+                    CELL_SIZE - 4,
+                    CELL_SIZE - 4
+                );
+            });
+
+            // 绘制蛇
+            snake.forEach((segment, index) => {
+                const gradient = ctx.createRadialGradient(
+                    segment.x * CELL_SIZE + CELL_SIZE / 2,
+                    segment.y * CELL_SIZE + CELL_SIZE / 2,
+                    0,
+                    segment.x * CELL_SIZE + CELL_SIZE / 2,
+                    segment.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2
+                );
+                
+                if (index === 0) {
+                    gradient.addColorStop(0, '#00ff88');
+                    gradient.addColorStop(1, '#00aa55');
+                } else {
+                    const alpha = 1 - (index / snake.length) * 0.5;
+                    gradient.addColorStop(0, `rgba(0, 200, 100, ${alpha})`);
+                    gradient.addColorStop(1, `rgba(0, 150, 80, ${alpha})`);
+                }
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.roundRect(
+                    segment.x * CELL_SIZE + 2,
+                    segment.y * CELL_SIZE + 2,
+                    CELL_SIZE - 4,
+                    CELL_SIZE - 4,
+                    5
+                );
+                ctx.fill();
+
+                // 蛇头眼睛
+                if (index === 0) {
+                    ctx.fillStyle = '#fff';
+                    const eyeOffset = CELL_SIZE / 4;
+                    const eyeSize = 3;
+                    
+                    if (direction.x === 1) {
+                        ctx.beginPath();
+                        ctx.arc(segment.x * CELL_SIZE + CELL_SIZE - 8, segment.y * CELL_SIZE + 8, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(segment.x * CELL_SIZE + CELL_SIZE - 8, segment.y * CELL_SIZE + CELL_SIZE - 8, eyeSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (direction.x === -1) {
+                        ctx.beginPath();
+                        ctx.arc(segment.x * CELL_SIZE + 8, segment.y * CELL_SIZE + 8, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(segment.x * CELL_SIZE + 8, segment.y * CELL_SIZE + CELL_SIZE - 8, eyeSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (direction.y === 1) {
+                        ctx.beginPath();
+                        ctx.arc(segment.x * CELL_SIZE + 8, segment.y * CELL_SIZE + CELL_SIZE - 8, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(segment.x * CELL_SIZE + CELL_SIZE - 8, segment.y * CELL_SIZE + CELL_SIZE - 8, eyeSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(segment.x * CELL_SIZE + 8, segment.y * CELL_SIZE + 8, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(segment.x * CELL_SIZE + CELL_SIZE - 8, segment.y * CELL_SIZE + 8, eyeSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            });
+
+            // 绘制食物
+            if (food) {
+                const gradient = ctx.createRadialGradient(
+                    food.x * CELL_SIZE + CELL_SIZE / 2,
+                    food.y * CELL_SIZE + CELL_SIZE / 2,
+                    0,
+                    food.x * CELL_SIZE + CELL_SIZE / 2,
+                    food.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2
+                );
+                gradient.addColorStop(0, '#ff6b6b');
+                gradient.addColorStop(1, '#ee5a5a');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(
+                    food.x * CELL_SIZE + CELL_SIZE / 2,
+                    food.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2 - 4,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // 食物光效
+                ctx.shadowColor = '#ff6b6b';
+                ctx.shadowBlur = 15;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // 绘制传送门
+            if (portalActive && portal) {
+                const time = Date.now() / 200;
+                const pulseSize = Math.sin(time) * 3;
+                
+                const gradient = ctx.createRadialGradient(
+                    portal.x * CELL_SIZE + CELL_SIZE / 2,
+                    portal.y * CELL_SIZE + CELL_SIZE / 2,
+                    0,
+                    portal.x * CELL_SIZE + CELL_SIZE / 2,
+                    portal.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2 + pulseSize
+                );
+                gradient.addColorStop(0, '#00f2fe');
+                gradient.addColorStop(0.5, '#4facfe');
+                gradient.addColorStop(1, 'rgba(79, 172, 254, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(
+                    portal.x * CELL_SIZE + CELL_SIZE / 2,
+                    portal.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 2 + pulseSize,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+
+                // 传送门内部
+                ctx.fillStyle = '#0a0a15';
+                ctx.beginPath();
+                ctx.arc(
+                    portal.x * CELL_SIZE + CELL_SIZE / 2,
+                    portal.y * CELL_SIZE + CELL_SIZE / 2,
+                    CELL_SIZE / 4,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        // 键盘控制
+        function handleKeyDown(e) {
+            const key = e.key.toLowerCase();
+            
+            switch (key) {
+                case 'w':
+                case 'arrowup':
+                    if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
+                    break;
+                case 's':
+                case 'arrowdown':
+                    if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
+                    break;
+                case 'a':
+                case 'arrowleft':
+                    if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
+                    break;
+                case 'd':
+                case 'arrowright':
+                    if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
+                    break;
+            }
+        }
+
+        // 更新UI
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+        }
+
+        function updateProgress() {
+            if (gameMode !== 'level') return;
+            const config = levelConfigs[currentLevel - 1];
+            const percent = Math.min((progress / config.target) * 100, 100);
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+
+        // 游戏结束
+        function gameOver() {
+            stopGame();
+            document.getElementById('modalTitle').textContent = '游戏结束';
+            document.getElementById('modalContent').classList.remove('level-complete');
+            document.getElementById('modalMessage').innerHTML = '得分: <span>' + score + '</span>';
+            document.getElementById('modalButtons').innerHTML = `
+                <button class="modal-btn btn-restart" onclick="restartGame()">重新开始</button>
+                <button class="modal-btn btn-menu" onclick="backToMenu()">返回菜单</button>
+            `;
+            document.getElementById('gameModal').style.display = 'flex';
+        }
+
+        // 关卡完成
+        function levelComplete() {
+            stopGame();
+            
+            // 解锁下一关
+            if (currentLevel >= unlockedLevels && currentLevel < TOTAL_LEVELS) {
+                unlockedLevels = currentLevel + 1;
+                saveProgress();
+            }
+
+            document.getElementById('modalTitle').textContent = '恭喜过关!';
+            document.getElementById('modalContent').classList.add('level-complete');
+            document.getElementById('modalMessage').innerHTML = 
+                '第 <span>' + currentLevel + '</span> 关完成!<br>得分: <span>' + score + '</span>';
+            
+            let buttons = `
+                <button class="modal-btn btn-restart" onclick="restartGame()">重玩本关</button>
+            `;
+            if (currentLevel < TOTAL_LEVELS) {
+                buttons += `<button class="modal-btn btn-next" onclick="nextLevel()">下一关</button>`;
+            }
+            buttons += `<button class="modal-btn btn-menu" onclick="backToMenu()">返回菜单</button>`;
+            
+            document.getElementById('modalButtons').innerHTML = buttons;
+            document.getElementById('gameModal').style.display = 'flex';
+        }
+
+        // 下一关
+        function nextLevel() {
+            document.getElementById('gameModal').style.display = 'none';
+            currentLevel++;
+            const config = levelConfigs[currentLevel - 1];
+            gameSpeed = config.speed;
+            document.getElementById('levelNum').textContent = currentLevel;
+            initGame();
+        }
+
+        // 重新开始
+        function restartGame() {
+            document.getElementById('gameModal').style.display = 'none';
+            initGame();
+        }
+
+        // 停止游戏
+        function stopGame() {
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+# 📂 Antigravity 配额监控工具
+
+所有文件已成功移动到此目录！
+
+## 📋 文件清单
+
+✅ `antigravity-quota-checker.js` - 命令行配额查看工具
+✅ `antigravity-server.js` - Web 服务器
+✅ `start-server.bat` - 启动 Web 服务器（双击运行）
+✅ `check-quota.bat` - 快速查看配额（双击运行）
+✅ `package.json` - NPM 配置文件
+✅ `README.md` - 完整使用文档
+✅ `快速开始.md` - 新手快速入门指南
+
+---
+
+## 🚀 快速使用（3 秒开始）
+
+### 方法 1：查看配额（最简单）
+**双击** → `check-quota.bat`
+
+### 方法 2：Web 界面（推荐）
+**双击** → `start-server.bat` → 打开浏览器访问 `http://localhost:8080`
+
+---
+
+## 📖 详细说明
+
+请查看以下文件获取更多信息：
+- **新手？** → 先看 `快速开始.md`
+- **详细文档** → 查看 `README.md`
+
+---
+
+## ⚡ 常见操作
+
+### 命令行查看
+```bash
+node antigravity-quota-checker.js
+```
+
+### 启动 Web 服务器
+```bash
+node antigravity-server.js
+```
+
+### 自定义端口
+```bash
+PORT=8081 node antigravity-server.js
+```
+
+---
+
+## 🎯 功能特点
+
+- ✅ 实时查看 Claude & Gemini 配额
+- ✅ 多账户支持
+- ✅ 显示配额重置时间
+- ✅ 彩色进度条
+- ✅ 自动刷新（Web 界面）
+- ✅ 完全本地运行，安全可靠
+
+---
+
+## 💡 提示
+
+1. **首次使用**需要先运行 `opencode auth login` 登录 Google 账户
+2. **推荐使用** Web 界面，体验更好
+3. **每天查看**一次配额，避免意外限流
+
+---
+
+**安装位置**: F:\AI编程\配额使用
+**创建时间**: 2026-01-28
+**版本**: 1.0.0
+
+祝使用愉快！🎉

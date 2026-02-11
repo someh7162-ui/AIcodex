@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本帅哥知错了嘛～</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* 库洛米主题色：紫、黑、粉 */
+            --kuromi-purple: #9b51e0;
+            --kuromi-dark: #2d2d2d;
+            --kuromi-black: #1a1a1a;
+            --kuromi-pink: #ff6b9d; /* 保留一点原本的粉色作为点缀 */
+            --soft-purple: #e0c3fc;
+            --light-purple: #f3e5f5;
+            
+            --shadow-purple: rgba(155, 81, 224, 0.25);
+            --gradient-kuromi: linear-gradient(135deg, #f3e5f5 0%, #e0c3fc 50%, #d7b8f3 100%);
+            --gradient-button: linear-gradient(45deg, #2d2d2d 0%, #4a4a4a 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            background: var(--gradient-kuromi);
+            font-family: 'Nunito', sans-serif;
+            overflow: hidden;
+            position: relative;
+            /* 背景稍微深沉一点点，符合库洛米风格 */
+            color: var(--kuromi-dark);
+        }
+
+        /* 满屏爱心容器 */
+        .fullscreen-hearts {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 2;
+            overflow: hidden;
+        }
+
+        .fullscreen-heart {
+            position: absolute;
+            font-size: 24px;
+            /* 爱心颜色变为紫色和深色 */
+            color: var(--kuromi-purple);
+            animation: heart-float-fullscreen 6s ease-in-out infinite;
+            filter: drop-shadow(0 2px 4px rgba(155, 81, 224, 0.2));
+            opacity: 0.6;
+        }
+
+        /* 偶尔出现黑色爱心 */
+        .fullscreen-heart.dark {
+            color: var(--kuromi-dark);
+        }
+
+        @keyframes heart-float-fullscreen {
+            0% { 
+                transform: translateY(100vh) rotate(0deg) scale(1); 
+                opacity: 0;
+            }
+            10% { 
+                opacity: 0.8; 
+            }
+            90% { 
+                opacity: 0.8; 
+            }
+            100% { 
+                transform: translateY(-100px) rotate(360deg) scale(1.2); 
+                opacity: 0;
+            }
+        }
+
+        /* 背景装饰 - 把云朵改成稍微神秘一点的圆点或保持云朵但颜色变深 */
+        .background-decoration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        /* 骷髅头装饰 (库洛米的标志) */
+        .skull-decoration {
+            position: absolute;
+            font-size: 40px;
+            opacity: 0.1;
+            animation: float-skull 15s linear infinite;
+        }
+
+        @keyframes float-skull {
+            0% { transform: translateY(100vh) rotate(0deg); }
+            100% { transform: translateY(-20vh) rotate(360deg); }
+        }
+
+        /* 主容器 */
+        .container {
+            position: relative;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            padding: 20px;
+        }
+
+        /* 标题 - 库洛米风格字体颜色 */
+        .title {
+            font-family: 'Fredoka', cursive;
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--kuromi-dark);
+            text-shadow: 3px 3px 0px var(--soft-purple);
+            margin-bottom: 2rem;
+            animation: title-bounce 3s ease-in-out infinite;
+            text-align: center;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* 给标题加个小恶魔角装饰 (CSS伪元素) */
+        .title::after {
+            content: '😈';
+            font-size: 0.6em;
+            position: absolute;
+            top: -20px;
+            right: -30px;
+            transform: rotate(15deg);
+            animation: gentle-float 2s ease-in-out infinite;
+        }
+
+        @keyframes title-bounce {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-5px) scale(1.02); }
+        }
+
+        /* 库洛米容器 */
+        .character-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 2rem;
+            z-index: 5;
+        }
+
+        /* 库洛米图片 */
+        .character-img-box {
+            position: relative;
+            width: 300px; /* 稍微调大一点 */
+            height: 300px;
+            margin-bottom: 20px;
+            /* 更有节奏感的浮动 */
+            animation: playful-float 4s ease-in-out infinite;
+            filter: drop-shadow(0 10px 25px rgba(45, 45, 45, 0.3));
+            /* 库洛米风格通常不一定需要圆角矩形背景，可以直接是透明图片，这里保留圆角但改颜色 */
+            /* border-radius: 20px; */ 
+            /* background: rgba(255, 255, 255, 0.5); */
+        }
+
+        .character-img-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 改为 contain 以免图片被裁剪 */
+            object-position: center;
+        }
+
+        @keyframes playful-float {
+            0%, 100% { transform: translateY(0px) rotate(-2deg); }
+            50% { transform: translateY(-20px) rotate(2deg); }
+        }
+
+        /* 对话框 - 库洛米风格 */
+        .speech-bubble {
+            position: absolute;
+            top: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--kuromi-dark);
+            color: white; /* 黑底白字 */
+            padding: 18px 25px;
+            border-radius: 20px;
+            border-bottom-left-radius: 5px; /* 不规则圆角更有个性 */
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.2);
+            font-family: 'Fredoka', cursive;
+            font-size: 16px;
+            font-weight: 500;
+            white-space: nowrap;
+            animation: bubble-float 4s ease-in-out infinite;
+            border: 2px solid var(--kuromi-purple);
+            max-width: 320px;
+            text-align: center;
+            z-index: 6;
+        }
+
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 20px; /* 尾巴偏左 */
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid var(--kuromi-dark);
+        }
+
+        @keyframes bubble-float {
+            0%, 100% { transform: translateX(-50%) translateY(0px) scale(1); }
+            50% { transform: translateX(-50%) translateY(-8px) scale(1.02); }
+        }
+
+        /* 按钮容器 */
+        .button-container {
+            display: flex;
+            gap: 40px;
+            margin-top: 20px;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* 按钮基础样式 */
+        .btn {
+            position: relative;
+            padding: 16px 38px;
+            border: none;
+            border-radius: 12px; /* 方一点的圆角更酷 */
+            font-family: 'Fredoka', cursive;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 0px rgba(0,0,0,0.2); /* 硬阴影 */
+        }
+
+        /* 接受按钮：库洛米紫/黑色 */
+        .btn-yes {
+            background: var(--kuromi-dark);
+            color: white;
+            border: 2px solid var(--kuromi-dark);
+        }
+        
+        .btn-yes:hover {
+            background: var(--kuromi-purple);
+            border-color: var(--kuromi-purple);
+            box-shadow: 0 5px 0px #5e35b1;
+        }
+
+        /* 拒绝按钮：浅灰色 */
+        .btn-no {
+            background: #e0e0e0;
+            color: #666;
+            border: 2px solid #bdbdbd;
+        }
+        
+        .btn-no:hover {
+            background: #d6d6d6;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.2);
+        }
+
+        /* 按钮涟漪效果 */
+        .btn-ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            pointer-events: none;
+        }
+
+        @keyframes ripple {
+            to { transform: scale(4); opacity: 0; }
+        }
+
+        /* 满屏爱心粒子特效 */
+        .heart-particle {
+            position: fixed;
+            color: var(--kuromi-purple); /* 紫色粒子 */
+            font-size: 20px;
+            pointer-events: none;
+            animation: heart-explosion 4s ease-out forwards;
+            z-index: 100;
+        }
+
+        @keyframes heart-explosion {
+            0% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); }
+            50% { transform: translate(var(--random-x), var(--random-y)) scale(1.3) rotate(180deg); }
+            100% { opacity: 0; transform: translate(var(--random-x), calc(var(--random-y) - 200px)) scale(1.8) rotate(360deg); }
+        }
+
+        /* 满屏爱心雨特效 - 紫色雨 */
+        .heart-rain {
+            position: fixed;
+            top: -50px;
+            left: 0;
+            width: 100%;
+            height: calc(100vh + 100px);
+            pointer-events: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .falling-heart {
+            position: absolute;
+            color: var(--kuromi-purple);
+            font-size: 28px;
+            animation: fall-heart-fullscreen 4s linear forwards;
+            filter: drop-shadow(0 4px 8px rgba(155, 81, 224, 0.5));
+        }
+
+        .falling-heart.black {
+             color: var(--kuromi-dark);
+        }
+
+        @keyframes fall-heart-fullscreen {
+            0% { transform: translateY(-50px) rotate(0deg) scale(1); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(calc(100vh + 50px)) rotate(360deg) scale(1.5); opacity: 0; }
+        }
+
+        /* 成功动画 */
+        .celebration {
+            animation: celebration-bounce 2s ease-in-out;
+        }
+
+        @keyframes celebration-bounce {
+            0% { transform: scale(1) rotate(0deg); }
+            15% { transform: scale(1.1) rotate(-3deg); }
+            30% { transform: scale(1.2) rotate(3deg); }
+            45% { transform: scale(1.3) rotate(-2deg); }
+            60% { transform: scale(1.25) rotate(2deg); }
+            75% { transform: scale(1.15) rotate(-1deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+
+        /* 伤心动画 */
+        .sad {
+            animation: sad-shake 0.8s ease-in-out;
+        }
+
+        @keyframes sad-shake {
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            10% { transform: translateX(-5px) rotate(-1deg); }
+            20% { transform: translateX(5px) rotate(1deg); }
+            30% { transform: translateX(-4px) rotate(-1deg); }
+            40% { transform: translateX(4px) rotate(1deg); }
+            50% { transform: translateX(-3px) rotate(-1deg); }
+            60% { transform: translateX(3px) rotate(1deg); }
+            70% { transform: translateX(-2px) rotate(-1deg); }
+            80% { transform: translateX(2px) rotate(1deg); }
+            90% { transform: translateX(-1px) rotate(-1deg); }
+        }
+
+        /* 最终告白弹窗 - 库洛米风格 */
+        .final-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.4),
+                0 0 0 4px var(--kuromi-dark); /* 黑色边框 */
+            text-align: center;
+            z-index: 1001;
+            display: none;
+            animation: modal-appear 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        /* 弹窗上的装饰 */
+        .final-message::before {
+            content: '💀';
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 40px;
+            background: white;
+            padding: 0 10px;
+        }
+
+        .final-message h2 {
+            font-family: 'Fredoka', cursive;
+            font-size: 2.2rem;
+            color: var(--kuromi-dark);
+            margin-bottom: 20px;
+        }
+
+        .final-message p {
+            font-family: 'Nunito', sans-serif;
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        @keyframes modal-appear {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5) rotate(-10deg); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5); /* 遮罩更黑 */
+            z-index: 1000;
+            display: none;
+            backdrop-filter: blur(5px);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .title { font-size: 2.2rem; }
+            .character-img-box { width: 240px; height: 240px; }
+            .button-container { flex-direction: column; gap: 20px; width: 80%; }
+            .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 满屏爱心背景 -->
+    <div class="fullscreen-hearts" id="fullscreenHearts"></div>
+
+    <!-- 背景装饰：骷髅头 -->
+    <div class="background-decoration" id="bgDecoration">
+        <!-- JS 会生成一些漂浮的元素 -->
+    </div>
+
+    <div class="container">
+        <h1 class="title">本帅哥知错了嘛～</h1>
+        
+        <div class="character-container">
+            <div class="character-img-box" id="characterBox">
+                <!-- 这里使用了你提供的图片文件名 -->
+                <img src="Gemini_Generated_Image_qp6cgcqp6cgcqp6c.png" alt="Kuromi Apologizing" 
+                     onerror="this.src='https://i.pinimg.com/originals/e8/35/6b/e8356b633009366373b9e4d026338573.png'; this.style.opacity='0.8';">
+                
+                <!-- 对话框 -->
+                <div class="speech-bubble" id="speechBubble">
+                    哼...这次算我不对啦 (｡•́︿•̀｡)
+                </div>
+            </div>
+        </div>
+
+        <!-- 按钮 -->
+        <div class="button-container">
+            <button class="btn btn-yes" id="btnYes">勉强原谅你 🖤</button>
+            <button class="btn btn-no" id="btnNo">绝不原谅 💢</button>
+        </div>
+    </div>
+
+    <!-- 最终弹窗 -->
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="heart-rain" id="heartRain"></div>
+    <div class="final-message" id="finalMessage">
+        <h2>果然还是最喜欢你了！🖤</h2>
+        <p>以后本帅哥会（尽量）乖乖的！<br>带我去吃好吃的吧！</p>
+        <button class="btn btn-yes" onclick="closeModal()">走吧走吧～</button>
+    </div>
+
+    <script>
+        let clickCount = 0;
+        let yesScale = 1;
+        let noScale = 1;
+
+        // 库洛米风格的话术（傲娇一点）
+        const messages = [
+            "哼...这次算我不对啦 (｡•́︿•̀｡)",
+            "你真的要一直不理我吗？",
+            "本帅哥都道歉了，给个面子嘛...",
+            "再不原谅我，我就...我就哭给你看！",
+            "那个黑色的按钮那么好看，你不点一下？",
+            "好啦好啦，我知道错了嘛...",
+            "原谅我这一次，我就把我的骷髅头送给你！",
+            "你再不点原谅，我就要捣蛋了哦！😈",
+            "求求你了嘛～大不了让你捏一下脸..."
+        ];
+
+        // 创建背景漂浮元素
+        function createBgDecoration() {
+            const container = document.getElementById('bgDecoration');
+            const symbols = ['💀', '💜', '⚡', '🖤'];
+            
+            for (let i = 0; i < 10; i++) {
+                const el = document.createElement('div');
+                el.className = 'skull-decoration';
+                el.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                el.style.left = Math.random() * 100 + '%';
+                el.style.animationDuration = (10 + Math.random() * 20) + 's';
+                el.style.animationDelay = '-' + (Math.random() * 10) + 's';
+                el.style.fontSize = (20 + Math.random() * 40) + 'px';
+                container.appendChild(el);
+            }
+        }
+
+        // 创建满屏飘动爱心
+        function createFullscreenHearts() {
+            const container = document.getElementById('fullscreenHearts');
+            
+            for (let i = 0; i < 20; i++) {
+                setTimeout(() => {
+                    const heart = document.createElement('div');
+                    heart.className = 'fullscreen-heart';
+                    // 随机加入深色爱心
+                    if (Math.random() > 0.6) heart.classList.add('dark');
+                    heart.innerHTML = Math.random() > 0.5 ? '💜' : '🖤';
+                    heart.style.left = Math.random() * 100 + '%';
+                    heart.style.animationDelay = Math.random() * 8 + 's';
+                    heart.style.animationDuration = (Math.random() * 4 + 8) + 's';
+                    container.appendChild(heart);
+                }, i * 500);
+            }
+        }
+
+        // 创建粒子特效
+        function createFullscreenHeartParticles(x, y, count = 12) {
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    const heart = document.createElement('div');
+                    heart.className = 'heart-particle';
+                    heart.innerHTML = Math.random() > 0.5 ? '💜' : '💀';
+                    
+                    const randomX = (Math.random() - 0.5) * 400;
+                    const randomY = (Math.random() - 0.5) * 300;
+                    
+                    heart.style.setProperty('--random-x', randomX + 'px');
+                    heart.style.setProperty('--random-y', randomY + 'px');
+                    heart.style.left = x + 'px';
+                    heart.style.top = y + 'px';
+                    heart.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    
+                    document.body.appendChild(heart);
+
+                    setTimeout(() => {
+                        heart.remove();
+                    }, 5000);
+                }, i * 60);
+            }
+        }
+
+        // 创建爱心雨
+        function createFullscreenHeartRain() {
+            const heartRain = document.getElementById('heartRain');
+            
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const heart = document.createElement('div');
+                    heart.className = 'falling-heart';
+                    if (Math.random() > 0.5) heart.classList.add('black');
+                    heart.innerHTML = Math.random() > 0.3 ? '💜' : '🖤';
+                    heart.style.left = Math.random() * 100 + '%';
+                    heart.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                    heart.style.fontSize = (Math.random() * 15 + 20) + 'px';
+                    heartRain.appendChild(heart);
+
+                    setTimeout(() => {
+                        heart.remove();
+                    }, 5000);
+                }, i * 100);
+            }
+        }
+
+        // 按钮涟漪
+        function createRippleEffect(event, button) {
+            const ripple = document.createElement('span');
+            const rect = button.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = event.clientX - rect.left - size / 2;
+            const y = event.clientY - rect.top - size / 2;
+            
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            ripple.classList.add('btn-ripple');
+            
+            button.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        }
+
+        function updateMessage() {
+            const speechBubble = document.getElementById('speechBubble');
+            const messageIndex = Math.min(Math.floor(clickCount / 2), messages.length - 1);
+            
+            speechBubble.style.opacity = '0.7';
+            setTimeout(() => {
+                speechBubble.textContent = messages[messageIndex];
+                speechBubble.style.opacity = '1';
+            }, 200);
+        }
+
+        // 点击"不原谅"
+        document.getElementById('btnNo').addEventListener('click', function(e) {
+            clickCount++;
+            createRippleEffect(e, this);
+            
+            noScale = Math.max(0.2, noScale - 0.12);
+            yesScale = Math.min(3, yesScale + 0.18);
+            
+            this.style.transform = `scale(${noScale})`;
+            document.getElementById('btnYes').style.transform = `scale(${yesScale})`;
+            
+            const charBox = document.getElementById('characterBox');
+            charBox.classList.add('sad');
+            setTimeout(() => charBox.classList.remove('sad'), 800);
+            
+            const rect = e.target.getBoundingClientRect();
+            createFullscreenHeartParticles(rect.left + rect.width / 2, rect.top, 10);
+            
+            updateMessage();
+            
+            if (Math.random() > 0.6) {
+                this.textContent = '哼！😤';
+                setTimeout(() => {
+                    this.textContent = '绝不原谅 💢';
+                }, 1000);
+            }
+        });
+
+        // 点击"原谅"
+        document.getElementById('btnYes').addEventListener('click', function(e) {
+            clickCount++;
+            createRippleEffect(e, this);
+            
+            const charBox = document.getElementById('characterBox');
+            charBox.classList.add('celebration');
+            setTimeout(() => charBox.classList.remove('celebration'), 2000);
+            
+            createFullscreenHeartRain();
+            
+            setTimeout(() => {
+                showFinalMessage();
+            }, 1500);
+            
+            updateMessage();
+            
+            this.textContent = '最喜欢你了！💜';
+            setTimeout(() => {
+                this.textContent = '勉强原谅你 🖤';
+            }, 2000);
+        });
+
+        function showFinalMessage() {
+            document.getElementById('modalOverlay').style.display = 'block';
+            document.getElementById('finalMessage').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').style.display = 'none';
+            document.getElementById('finalMessage').style.display = 'none';
+        }
+
+        document.getElementById('modalOverlay').addEventListener('click', closeModal);
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            createFullscreenHearts();
+            createBgDecoration();
+        });
+    </script>
+</body>
+</html>

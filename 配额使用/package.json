@@ -1,0 +1,25 @@
+{
+  "name": "antigravity-quota-monitor",
+  "version": "1.0.0",
+  "description": "Antigravity配额监控工具 - 监控Google Antigravity账户的Claude和Gemini配额使用情况",
+  "type": "module",
+  "main": "antigravity-server.js",
+  "scripts": {
+    "start": "node antigravity-server.js",
+    "check": "node antigravity-quota-checker.js"
+  },
+  "keywords": [
+    "antigravity",
+    "quota",
+    "monitor",
+    "claude",
+    "gemini",
+    "opencode"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "https-proxy-agent": "^7.0.6",
+    "node-fetch": "^3.3.2"
+  }
+}

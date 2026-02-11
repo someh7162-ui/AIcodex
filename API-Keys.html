@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的 API Keys</title>
+    <link rel="stylesheet" href="API-Keys.css">
+</head>
+<body>
+    <div class="container">
+        <h1>My API Keys</h1>
+        <p class="update-time">更新时间: 2026年2月11日</p>
+
+        <!-- Tavily API Key -->
+        <div class="api-card">
+            <div class="api-header">
+                <div class="api-icon tavily-icon">T</div>
+                <div>
+                    <div class="api-title">Tavily API Key <span class="status status-active">有效</span></div>
+                    <div class="api-subtitle">AI 优化的网络搜索 API</div>
+                </div>
+            </div>
+            <div class="api-key-container">
+                <span class="api-key" id="tavily-key">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</span>
+                <button class="copy-btn" onclick="copyKey('tavily-key')">复制</button>
+            </div>
+            <p class="source-info">来源: C:\Users\73475\.config\opencode\opencode.json</p>
+        </div>
+
+        <!-- Context7 API Key -->
+        <div class="api-card">
+            <div class="api-header">
+                <div class="api-icon context7-icon">C7</div>
+                <div>
+                    <div class="api-title">Context7 API Key <span class="status status-active">有效</span></div>
+                    <div class="api-subtitle">MCP 远程服务 API</div>
+                </div>
+            </div>
+            <div class="api-key-container">
+                <span class="api-key" id="context7-key">ctx7sk-b7abf3d3-fd30-4bb2-aafd-751e2f101401</span>
+                <button class="copy-btn" onclick="copyKey('context7-key')">复制</button>
+            </div>
+            <p class="source-info">来源: C:\Users\73475\.config\opencode\opencode.json</p>
+        </div>
+        <!-- SiliconFlow API Key (Placeholder) -->
+        <div class="api-card">
+            <div class="api-header">
+                <div class="api-icon siliconflow-icon">silicon</div>
+                <div>
+                    <div class="api-title">Silicon Flow API Key <span class="status status-active">有效</span></div>
+                    <div class="api-subtitle">Silicon Flow AI API</div>
+                </div>
+            </div>
+            <div class="api-key-container">
+                <span class="api-key" id="siliconflow-key">sk-wtjunkdleqxzxgvhdsjyoftxqgqtwqnjafytfrnxpiaekikl</span>
+                <button class="copy-btn" onclick="copyKey('siliconflow-key')">复制</button>
+            </div>
+            <p class="source-info">来源: silicon flow官网 https://api.siliconflow.cn/v1 API 地址</p>
+        </div>
+
+        <div class="warning-note">
+            <h3>安全提醒</h3>
+            <p>请妥善保管您的 API Key，不要在公开场合分享。如果 Key 泄露，请立即重新生成。</p>
+        </div>
+
+        <p class="footer">由 OpenCode 自动生成</p>
+    </div>
+
+    <script>
+        function copyKey(elementId) {
+            const keyElement = document.getElementById(elementId);
+            const key = keyElement.textContent;
+            navigator.clipboard.writeText(key).then(() => {
+                const btn = keyElement.nextElementSibling;
+                const originalText = btn.textContent;
+                btn.textContent = '已复制!';
+                btn.style.background = 'linear-gradient(135deg, #34d399, #059669)';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = 'linear-gradient(135deg, #00d9ff, #9d4edd)';
+                }, 1500);
+            }).catch(err => {
+                alert('复制失败: ' + err);
+            });
+        }
+    </script>
+</body>
+</html>
