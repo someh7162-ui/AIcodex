@@ -1,0 +1,45 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "遇见新疆",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/destinations/index",
+      "style": {
+        "navigationBarTitleText": "目的地",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/guides/index",
+      "style": {
+        "navigationBarTitleText": "旅行指南",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/account/index",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/destination-detail/index",
+      "style": {
+        "navigationBarTitleText": "目的地详情",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "遇见新疆",
+    "navigationBarBackgroundColor": "#FAF8F5",
+    "backgroundColor": "#FAF8F5"
+  }
+}

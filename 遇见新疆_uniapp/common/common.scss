@@ -1,0 +1,73 @@
+@import '../uni.scss';
+
+page {
+  background: $theme-bg;
+  color: $theme-text;
+  font-size: 28rpx;
+}
+
+view,
+text,
+input,
+button {
+  box-sizing: border-box;
+}
+
+.page-shell {
+  min-height: 100vh;
+  background: $theme-bg;
+}
+
+.page-scroll {
+  min-height: 100vh;
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, $theme-color 0%, $theme-secondary 55%, $theme-accent 100%);
+}
+
+.section {
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+.card {
+  background: #ffffff;
+  border: 2rpx solid $theme-border;
+  border-radius: 28rpx;
+  box-shadow: 0 16rpx 40rpx rgba(45, 24, 16, 0.08);
+}
+
+.section-title {
+  font-size: 38rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.muted-text {
+  color: $theme-muted;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+}
+
+.tag-primary {
+  background: $theme-color;
+  color: #ffffff;
+}
+
+.bottom-space {
+  height: 24rpx;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
