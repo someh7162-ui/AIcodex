@@ -20,36 +20,56 @@
         <view class="map-card card">
           <view class="map-head">
             <view>
-              <text class="map-title">你与景区的位置关系</text>
-              <text class="map-subtitle muted-text">优先显示你当前定位，没有授权时展示景区默认位置</text>
+              <text class="map-title">景区位置与导航</text>
+              <text class="map-subtitle muted-text">展示景区地图位置，并可估算当前出发的时间和距离</text>
             </view>
             <view class="map-status" :class="{ ready: locationReady }">{{ locationStatusText }}</view>
           </view>
 
           <view class="location-meta">
-            <text class="meta-label">当前位置</text>
-            <text class="meta-value">{{ currentLocationText }}</text>
+            <text class="meta-label">景区位置</text>
+            <text class="meta-value">{{ scenicLocationText }}</text>
           </view>
           <view class="location-meta scenic-meta">
-            <text class="meta-label">景区坐标</text>
-            <text class="meta-value">{{ scenicLocationText }}</text>
+            <text class="meta-label">路线方式</text>
+            <view class="route-mode-group">
+              <view
+                v-for="item in routeModeOptions"
+                :key="item.value"
+                class="route-mode-chip"
+                :class="{ active: routeMode === item.value }"
+                @tap="changeRouteMode(item.value)"
+              >
+                {{ item.label }}
+              </view>
+            </view>
+          </view>
+          <view class="route-summary card-lite scenic-meta">
+            <view class="route-summary-item">
+              <text class="meta-label">预计时间</text>
+              <text class="route-highlight">{{ routeDurationText }}</text>
+            </view>
+            <view class="route-summary-item">
+              <text class="meta-label">预计距离</text>
+              <text class="route-highlight">{{ routeDistanceText }}</text>
+            </view>
+            <view v-if="routeMode === 'taxi'" class="route-summary-item route-summary-wide">
+              <text class="meta-label">打车预估</text>
+              <text class="meta-value">{{ taxiCostText }}</text>
+            </view>
           </view>
 
           <view v-if="mapImageUrl" class="map-preview">
             <CachedImage :src="mapImageUrl" image-class="cover-image" />
-            <view class="map-legend">
-              <text>我</text>
-              <text>景</text>
-            </view>
           </view>
           <view v-else class="map-fallback">
             <text class="map-fallback-title">等待高德地图 Key</text>
-            <text class="map-fallback-desc muted-text">你给我高德 Web 服务 Key 后，这里会显示静态地图、定位点和景区点。</text>
+            <text class="map-fallback-desc muted-text">填入高德 Web 服务 Key 后，这里会显示景区静态地图并支持驾车时间估算。</text>
           </view>
 
           <view class="map-actions">
-            <view class="primary-btn" @tap="refreshLocationAndWeather">刷新定位</view>
-            <view class="secondary-btn" @tap="openScenicLocation">打开地图导航</view>
+            <view class="primary-btn" @tap="openScenicLocation">地图导航</view>
+            <view class="secondary-btn" @tap="refreshLocationAndWeather">刷新路线</view>
           </view>
         </view>
       </view>
@@ -130,16 +150,22 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
 import { getDestinationById, getDouyinSearchUrl } from '../../common/destination-data'
-import { getCurrentLocation, getLiveWeather, getStaticMapUrl, reverseGeocode } from '../../services/amap'
+import { getCurrentLocation, getDrivingRoute, getLiveWeather, getStaticMapUrl, getWalkingRoute, reverseGeocode } from '../../services/amap'
 import { hasAmapKey } from '../../config/amap'
+
+const routeModeOptions = [
+  { label: '驾车', value: 'driving' },
+  { label: '步行', value: 'walking' },
+  { label: '打车', value: 'taxi' },
+]
 
 const currentId = ref('')
 const destination = computed(() => getDestinationById(currentId.value))
 
 const locationReady = ref(false)
 const locationStatusText = ref('未定位')
-const currentAddress = ref('尚未获取定位')
-const currentCoords = ref(null)
+const routeMode = ref('driving')
+const routeData = ref(null)
 const liveWeatherData = ref(null)
 const weatherError = ref('')
 
@@ -167,17 +193,36 @@ const weatherSourceText = computed(() => {
   if (liveWeatherData.value) {
     return '高德实时天气'
   }
-  return hasAmapKey() ? '定位或接口失败，已降级为预设天气' : '待填写高德 Key 后自动切换为实时天气'
+  return hasAmapKey() ? '天气接口失败，已降级为预设天气' : '待填写高德 Key 后自动切换为实时天气'
 })
 
-const currentLocationText = computed(() => currentAddress.value)
-
 const scenicLocationText = computed(() => {
-  const coords = destination.value?.coordinates
-  if (!coords) {
-    return '暂无景区坐标'
+  if (!destination.value) {
+    return '暂无景区信息'
   }
-  return `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`
+
+  const coords = destination.value.coordinates
+  if (!coords) {
+    return destination.value.location
+  }
+
+  return `${destination.value.location} · ${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`
+})
+
+const routeDurationText = computed(() => formatDuration(routeData.value?.duration))
+
+const routeDistanceText = computed(() => formatDistance(routeData.value?.distance))
+
+const taxiCostText = computed(() => {
+  if (routeMode.value !== 'taxi') {
+    return ''
+  }
+
+  if (routeData.value?.taxiCost) {
+    return `约 ${routeData.value.taxiCost} 元`
+  }
+
+  return hasAmapKey() ? '定位后自动估算' : '待填写高德 Key 后可估算'
 })
 
 const mapImageUrl = computed(() => {
@@ -190,14 +235,9 @@ const mapImageUrl = computed(() => {
     { longitude: coords.longitude, latitude: coords.latitude, label: '景' },
   ]
 
-  const center = currentCoords.value || coords
-  if (currentCoords.value) {
-    markers.unshift({ longitude: currentCoords.value.longitude, latitude: currentCoords.value.latitude, label: '我' })
-  }
-
   return getStaticMapUrl({
-    longitude: center.longitude,
-    latitude: center.latitude,
+    longitude: coords.longitude,
+    latitude: coords.latitude,
     markers,
   })
 })
@@ -214,47 +254,106 @@ async function refreshLocationAndWeather() {
 
   weatherError.value = ''
   locationStatusText.value = hasAmapKey() ? '定位中' : '待 Key'
+  routeData.value = null
   liveWeatherData.value = null
 
   if (!hasAmapKey()) {
     locationReady.value = false
-    currentAddress.value = '尚未填写高德 Web 服务 Key，暂时无法显示实时定位'
     return
   }
 
+  const scenicCoords = destination.value.coordinates
+
   try {
-    const scenicCoords = destination.value.coordinates
     const scenicRegeo = scenicCoords
       ? await reverseGeocode(scenicCoords.longitude, scenicCoords.latitude)
       : null
     const scenicAdcode = scenicRegeo?.addressComponent?.adcode
     const weather = scenicAdcode ? await getLiveWeather(scenicAdcode) : null
 
-    const location = await getCurrentLocation()
-    const regeo = await reverseGeocode(location.longitude, location.latitude)
-
-    if (location) {
-      currentCoords.value = {
-        longitude: location.longitude,
-        latitude: location.latitude,
-      }
-      locationReady.value = true
-      locationStatusText.value = '已定位'
-    }
-
-    if (regeo) {
-      currentAddress.value = regeo.formatted_address || `${regeo.addressComponent?.city || ''}${regeo.addressComponent?.district || ''}`
-    }
-
     if (weather) {
       liveWeatherData.value = weather
     }
   } catch (error) {
+    weatherError.value = '实时天气获取失败，当前显示预设天气。'
+  }
+
+  try {
+    const location = await getCurrentLocation()
+    const route = await loadRoute(location, scenicCoords, routeMode.value)
+
+    if (location) {
+      locationReady.value = true
+      locationStatusText.value = '已定位'
+    }
+
+    if (route) {
+      routeData.value = route
+    }
+  } catch (error) {
     locationReady.value = false
     locationStatusText.value = '定位失败'
-    weatherError.value = '未能获取实时定位/天气，请检查定位授权或稍后重试。'
-    currentAddress.value = destination.value.location
   }
+}
+
+async function changeRouteMode(mode) {
+  if (routeMode.value === mode) {
+    return
+  }
+
+  routeMode.value = mode
+  await refreshLocationAndWeather()
+}
+
+async function loadRoute(origin, destinationCoords, mode) {
+  if (mode === 'walking') {
+    return getWalkingRoute(origin, destinationCoords)
+  }
+
+  return getDrivingRoute(origin, destinationCoords)
+}
+
+function formatDuration(duration) {
+  if (duration) {
+    const totalMinutes = Math.round(Number(duration) / 60)
+    if (totalMinutes < 60) {
+      return `约 ${totalMinutes} 分钟`
+    }
+
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return minutes ? `约 ${hours} 小时 ${minutes} 分钟` : `约 ${hours} 小时`
+  }
+
+  if (!hasAmapKey()) {
+    return '待填写高德 Key 后可估算'
+  }
+
+  if (locationStatusText.value === '定位失败') {
+    return '定位失败，暂时无法估算'
+  }
+
+  return '定位后自动估算'
+}
+
+function formatDistance(distance) {
+  if (distance) {
+    const distanceNum = Number(distance)
+    if (distanceNum < 1000) {
+      return `约 ${Math.round(distanceNum)} 米`
+    }
+    return `约 ${(distanceNum / 1000).toFixed(1)} 公里`
+  }
+
+  if (!hasAmapKey()) {
+    return '待填写高德 Key 后可估算'
+  }
+
+  if (locationStatusText.value === '定位失败') {
+    return '定位失败，暂时无法估算'
+  }
+
+  return '定位后自动估算'
 }
 
 function goBack() {
@@ -310,6 +409,20 @@ function copyKeyword() {
 function openScenicLocation() {
   const coords = destination.value?.coordinates
   if (!coords) {
+    return
+  }
+
+  const amapUrl = `amapuri://route/plan/?dlat=${coords.latitude}&dlon=${coords.longitude}&dname=${encodeURIComponent(destination.value.name)}&dev=0&t=0`
+
+  if (typeof plus !== 'undefined' && plus.runtime && plus.runtime.openURL) {
+    plus.runtime.openURL(amapUrl, () => {
+      uni.openLocation({
+        longitude: coords.longitude,
+        latitude: coords.latitude,
+        name: destination.value.name,
+        address: destination.value.location,
+      })
+    })
     return
   }
 
@@ -448,8 +561,64 @@ function openScenicLocation() {
   margin-top: 22rpx;
 }
 
+.route-mode-group {
+  display: flex;
+  gap: 16rpx;
+  flex-wrap: wrap;
+  margin-top: 14rpx;
+}
+
+.route-mode-chip {
+  min-width: 120rpx;
+  height: 64rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: rgba(232, 168, 124, 0.12);
+  color: $theme-text;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+}
+
+.route-mode-chip.active {
+  background: $theme-color;
+  color: #ffffff;
+}
+
 .scenic-meta {
   margin-top: 12rpx;
+}
+
+.route-summary {
+  margin-top: 18rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.12);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18rpx;
+}
+
+.card-lite {
+  border: 2rpx solid rgba(232, 168, 124, 0.2);
+}
+
+.route-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.route-summary-wide {
+  grid-column: 1 / -1;
+}
+
+.route-highlight {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $theme-color;
 }
 
 .meta-label {
@@ -462,27 +631,6 @@ function openScenicLocation() {
   margin-top: 22rpx;
   overflow: hidden;
   border-radius: 28rpx;
-}
-
-.map-legend {
-  position: absolute;
-  right: 18rpx;
-  top: 18rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.map-legend text {
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  color: $theme-color;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22rpx;
 }
 
 .map-fallback {

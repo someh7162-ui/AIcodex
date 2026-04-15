@@ -66,6 +66,47 @@ export async function getLiveWeather(adcode) {
   return data.lives[0]
 }
 
+export async function getDrivingRoute(origin, destination) {
+  if (!hasAmapKey() || !origin || !destination) {
+    return null
+  }
+
+  const data = await request('https://restapi.amap.com/v3/direction/driving', {
+    key: AMAP_WEB_KEY,
+    origin: `${origin.longitude},${origin.latitude}`,
+    destination: `${destination.longitude},${destination.latitude}`,
+    strategy: 0,
+    extensions: 'all',
+  })
+
+  if (data.status !== '1' || !data.route?.paths?.length) {
+    throw new Error(data.info || '驾车路线获取失败')
+  }
+
+  return {
+    ...data.route.paths[0],
+    taxiCost: data.route.taxi_cost || '',
+  }
+}
+
+export async function getWalkingRoute(origin, destination) {
+  if (!hasAmapKey() || !origin || !destination) {
+    return null
+  }
+
+  const data = await request('https://restapi.amap.com/v3/direction/walking', {
+    key: AMAP_WEB_KEY,
+    origin: `${origin.longitude},${origin.latitude}`,
+    destination: `${destination.longitude},${destination.latitude}`,
+  })
+
+  if (data.status !== '1' || !data.route?.paths?.length) {
+    throw new Error(data.info || '步行路线获取失败')
+  }
+
+  return data.route.paths[0]
+}
+
 export async function getCurrentLocation() {
   return new Promise((resolve, reject) => {
     uni.getLocation({
