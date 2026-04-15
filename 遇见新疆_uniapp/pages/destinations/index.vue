@@ -2,17 +2,23 @@
   <view class="page-shell">
     <view class="page-scroll">
       <view class="hero-gradient top-banner section">
-        <text class="banner-title">探索目的地</text>
+        <text class="banner-title">探索新疆景区</text>
         <view class="search-box">
           <text class="search-mark">搜</text>
-          <input v-model="searchQuery" class="search-input" placeholder="搜索你想去的新疆风景..." />
+          <input v-model="searchQuery" class="search-input" placeholder="搜索景区、地区或分类..." />
         </view>
       </view>
 
-      <scroll-view scroll-x class="category-strip" show-scrollbar="false">
-        <view class="category-row">
+      <view class="section category-panel card">
+        <view class="category-panel-head">
+          <text class="category-panel-title">景区分类</text>
+          <text v-if="categories.length > defaultVisibleCount" class="category-toggle" @tap="toggleCategories">
+            {{ categoriesExpanded ? '收起分类' : `展开全部 ${categories.length - 1} 类` }}
+          </text>
+        </view>
+        <view class="category-grid">
           <view
-            v-for="item in categories"
+            v-for="item in visibleCategories"
             :key="item"
             class="category-pill"
             :class="{ active: currentCategory === item }"
@@ -21,10 +27,30 @@
             <text>{{ item }}</text>
           </view>
         </view>
-      </scroll-view>
+      </view>
+
+      <view class="section category-panel card">
+        <view class="category-panel-head">
+          <text class="category-panel-title">所在地区</text>
+          <text v-if="regions.length > defaultVisibleCount" class="category-toggle" @tap="toggleRegions">
+            {{ regionsExpanded ? '收起地区' : `展开全部 ${regions.length - 1} 个地州` }}
+          </text>
+        </view>
+        <view class="category-grid">
+          <view
+            v-for="item in visibleRegions"
+            :key="item"
+            class="category-pill region-pill"
+            :class="{ active: currentRegion === item }"
+            @tap="currentRegion = item"
+          >
+            <text>{{ item }}</text>
+          </view>
+        </view>
+      </view>
 
       <view class="section result-meta">
-        <text class="muted-text">共找到 {{ filteredDestinations.length }} 个目的地</text>
+        <text class="muted-text">共找到 {{ filteredDestinations.length }} 个景区</text>
       </view>
 
       <view class="section card-list">
@@ -57,12 +83,43 @@
 import { computed, ref } from 'vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import CachedImage from '../../components/CachedImage.vue'
-import { destinationList } from '../../common/destination-data'
+import { destinationList, scenicCategories, scenicRegions } from '../../common/destination-data'
 
 const searchQuery = ref('')
 const currentCategory = ref('全部')
+const currentRegion = ref('全部')
+const categoriesExpanded = ref(false)
+const regionsExpanded = ref(false)
+const defaultVisibleCount = 5
 
-const categories = ['全部', '自然风光', '人文古城', '探险穿越', '市集烟火']
+const categories = scenicCategories
+const regions = scenicRegions
+
+const visibleCategories = computed(() => {
+  if (categoriesExpanded.value || categories.length <= defaultVisibleCount) {
+    return categories
+  }
+
+  const compact = categories.slice(0, defaultVisibleCount)
+  if (compact.includes(currentCategory.value)) {
+    return compact
+  }
+
+  return [categories[0], currentCategory.value, ...categories.slice(1, defaultVisibleCount - 1)]
+})
+
+const visibleRegions = computed(() => {
+  if (regionsExpanded.value || regions.length <= defaultVisibleCount) {
+    return regions
+  }
+
+  const compact = regions.slice(0, defaultVisibleCount)
+  if (compact.includes(currentRegion.value)) {
+    return compact
+  }
+
+  return [regions[0], currentRegion.value, ...regions.slice(1, defaultVisibleCount - 1)]
+})
 
 const destinations = destinationList
 
@@ -70,13 +127,23 @@ const filteredDestinations = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   return destinations.filter((item) => {
     const matchesCategory = currentCategory.value === '全部' || item.category === currentCategory.value
-    const matchesSearch = !query || item.name.toLowerCase().includes(query)
-    return matchesCategory && matchesSearch
+    const matchesRegion = currentRegion.value === '全部' || item.region === currentRegion.value
+    const searchText = [item.name, item.location, item.region, item.category].join(' ').toLowerCase()
+    const matchesSearch = !query || searchText.includes(query)
+    return matchesCategory && matchesRegion && matchesSearch
   })
 })
 
 function openDetail(id) {
   uni.navigateTo({ url: `/pages/destination-detail/index?id=${id}` })
+}
+
+function toggleCategories() {
+  categoriesExpanded.value = !categoriesExpanded.value
+}
+
+function toggleRegions() {
+  regionsExpanded.value = !regionsExpanded.value
 }
 </script>
 
@@ -119,15 +186,37 @@ function openDetail(id) {
   height: 92rpx;
 }
 
-.category-strip {
-  white-space: nowrap;
-  padding: 28rpx 0 8rpx;
+.category-panel {
+  margin: 28rpx 32rpx 8rpx;
+  padding: 24rpx;
 }
 
-.category-row {
-  display: inline-flex;
+.category-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.category-panel-title {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.category-toggle {
+  font-size: 24rpx;
+  color: $theme-color;
+}
+
+.category-grid {
+  display: flex;
+  flex-wrap: wrap;
   gap: 18rpx;
-  padding: 0 32rpx;
+  margin-top: 20rpx;
+}
+
+.region-pill {
+  background: rgba(232, 168, 124, 0.08);
 }
 
 .category-pill {

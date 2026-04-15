@@ -138,10 +138,10 @@
       <view class="bottom-space"></view>
     </view>
 
-    <view v-else class="empty-shell section">
-      <text class="section-title">目的地不存在</text>
-      <view class="primary-btn narrow-btn" @tap="goBack">返回上一页</view>
-    </view>
+      <view v-else class="empty-shell section">
+        <text class="section-title">景区不存在</text>
+        <view class="primary-btn narrow-btn" @tap="goBack">返回上一页</view>
+      </view>
   </view>
 </template>
 

@@ -8,7 +8,7 @@
           <text class="hero-subtitle">沿着丝路风景，开启一段辽阔而热烈的旅程</text>
           <view class="hero-badge">
             <text class="hero-badge-dot"></text>
-            <text class="hero-badge-text">50+ 热门目的地</text>
+            <text class="hero-badge-text">{{ destinationList.length }} 个精选景区</text>
           </view>
         </view>
       </view>
@@ -24,10 +24,9 @@
 
       <view class="section section-block">
         <view class="section-head">
-          <text class="section-title">精选目的地</text>
+          <text class="section-title">{{ featuredSectionTitle }}</text>
           <text class="link-text" @tap="goToDestinations">查看全部</text>
         </view>
-
         <view class="card-list">
           <view v-for="item in featuredDestinations" :key="item.id" class="card destination-card" @tap="openDetail(item.id)">
             <view class="image-wrap">
@@ -40,6 +39,7 @@
             </view>
             <view class="destination-body">
               <text class="destination-title">{{ item.name }}</text>
+              <text class="destination-meta muted-text">{{ item.location }}<text v-if="item.distanceText"> · {{ item.distanceText }}</text></text>
               <text class="destination-desc muted-text">{{ item.description }}</text>
             </view>
           </view>
@@ -64,22 +64,57 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import CachedImage from '../../components/CachedImage.vue'
-import { destinationList } from '../../common/destination-data'
+import { destinationList, scenicCategories, scenicRegions } from '../../common/destination-data'
+import { getCurrentLocation } from '../../services/amap'
 
 const stats = [
-  { value: '50+', label: '景点推荐' },
-  { value: '100+', label: '旅行锦囊' },
-  { value: '4.8', label: '用户评分' },
+  { value: `${destinationList.length}`, label: '景区总数' },
+  { value: `${scenicCategories.length - 1}`, label: '景区分类' },
+  { value: `${scenicRegions.length - 1}`, label: '覆盖地区' },
 ]
 
-const featuredDestinations = destinationList.slice(0, 3)
+const currentCoords = ref(null)
+
+const featuredDestinations = computed(() => {
+  if (!currentCoords.value) {
+    return destinationList.slice(0, 3).map((item) => ({ ...item, distanceText: '' }))
+  }
+
+  return destinationList
+    .map((item) => {
+      const distanceKm = getDistanceKm(currentCoords.value, item.coordinates)
+      return {
+        ...item,
+        distanceKm,
+        distanceText: formatDistance(distanceKm),
+      }
+    })
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, 3)
+})
+
+const featuredSectionTitle = computed(() => (currentCoords.value ? '附近景区' : '精选景区'))
 
 const activities = [
   { short: '丝', title: '丝路人文漫游' },
   { short: '沙', title: '沙漠越野探险' },
 ]
+
+onLoad(async () => {
+  try {
+    const location = await getCurrentLocation()
+    currentCoords.value = {
+      longitude: location.longitude,
+      latitude: location.latitude,
+    }
+  } catch (error) {
+    currentCoords.value = null
+  }
+})
 
 function goToDestinations() {
   uni.reLaunch({ url: '/pages/destinations/index' })
@@ -87,6 +122,35 @@ function goToDestinations() {
 
 function openDetail(id) {
   uni.navigateTo({ url: `/pages/destination-detail/index?id=${id}` })
+}
+
+function getDistanceKm(from, to) {
+  if (!from || !to) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const toRad = (value) => (value * Math.PI) / 180
+  const earthRadius = 6371
+  const dLat = toRad(to.latitude - from.latitude)
+  const dLng = toRad(to.longitude - from.longitude)
+  const lat1 = toRad(from.latitude)
+  const lat2 = toRad(to.latitude)
+
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return earthRadius * c
+}
+
+function formatDistance(distanceKm) {
+  if (!Number.isFinite(distanceKm)) {
+    return ''
+  }
+
+  if (distanceKm < 1) {
+    return `约 ${Math.round(distanceKm * 1000)} 米`
+  }
+
+  return `约 ${distanceKm.toFixed(1)} 公里`
 }
 </script>
 
@@ -263,6 +327,12 @@ function openDetail(id) {
   display: block;
   font-size: 34rpx;
   font-weight: 600;
+}
+
+.destination-meta {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 23rpx;
 }
 
 .destination-desc {
