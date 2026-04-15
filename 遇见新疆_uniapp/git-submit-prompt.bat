@@ -6,21 +6,16 @@ echo =====================================
 echo   XjtravelApp Git Quick Submit
 echo =====================================
 echo.
-set /p COMMIT_MSG=请输入提交说明（直接回车使用默认说明）: 
-echo.
 
-if defined COMMIT_MSG (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0git-submit.ps1" "%COMMIT_MSG%"
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0git-submit.ps1"
-)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0git-submit.ps1"
+set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
-if errorlevel 1 (
-  echo 执行失败，请查看上面的报错信息。
+if not "%EXIT_CODE%"=="0" (
+  echo Submit failed. Check the messages above.
 ) else (
-  echo 执行完成。
+  echo Submit finished.
 )
 echo.
 pause
-exit /b %ERRORLEVEL%
+exit /b %EXIT_CODE%

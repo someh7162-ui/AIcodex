@@ -114,6 +114,11 @@ if ([string]::IsNullOrWhiteSpace($RelPath)) {
 $RelPath = $RelPath.TrimEnd('/')
 $CommitMessage = ($CommitParts -join ' ').Trim()
 if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
+    $userInput = Read-Host 'Enter commit message (press Enter for default)'
+    $CommitMessage = $userInput.Trim()
+}
+
+if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
     $CommitMessage = 'chore: update XjtravelApp ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 }
 
