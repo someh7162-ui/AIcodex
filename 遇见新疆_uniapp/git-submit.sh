@@ -57,10 +57,34 @@ fi
 echo "Creating commit in parent repository..."
 git -C "$REPO_ROOT" commit -m "$COMMIT_MSG"
 
-echo "Building subtree split for $REL_PATH..."
-SPLIT_SHA="$(git -C "$REPO_ROOT" subtree split --prefix="$REL_PATH")"
+TEMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t xjtravelapp-publish)"
+cleanup() {
+  rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+echo "Preparing snapshot repository..."
+git -C "$TEMP_DIR" init --initial-branch "$TARGET_BRANCH" >/dev/null
+git -C "$TEMP_DIR" remote add origin "$REMOTE_URL"
+
+if git -C "$TEMP_DIR" fetch origin "$TARGET_BRANCH" --depth=1 >/dev/null 2>&1; then
+  git -C "$TEMP_DIR" checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
+else
+  echo "Remote branch $TARGET_BRANCH does not exist yet. A new branch will be created."
+fi
+
+find "$TEMP_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+cp -a "$SCRIPT_DIR"/. "$TEMP_DIR"/
+
+git -C "$TEMP_DIR" add -A
+if git -C "$TEMP_DIR" diff --cached --quiet; then
+  echo "Remote snapshot is already up to date."
+  exit 0
+fi
+
+git -C "$TEMP_DIR" commit -m "$COMMIT_MSG"
 
 echo "Pushing to $REMOTE_URL ($TARGET_BRANCH)..."
-git -C "$REPO_ROOT" push "$REMOTE_URL" "$SPLIT_SHA:refs/heads/$TARGET_BRANCH"
+git -C "$TEMP_DIR" push origin "HEAD:refs/heads/$TARGET_BRANCH"
 
 echo "Done."

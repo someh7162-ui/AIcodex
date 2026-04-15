@@ -5,34 +5,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 $RemoteUrl = 'https://github.com/someh7162-ui/XjtravelApp.git'
 $TargetBranch = 'main'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-function Get-RepoRoot {
-    param([string]$StartPath)
-
-    $current = Get-Item -LiteralPath $StartPath
-    while ($current) {
-        if (Test-Path -LiteralPath (Join-Path $current.FullName '.git')) {
-            return $current.FullName
-        }
-        $current = $current.Parent
-    }
-    throw 'Error: current folder is not inside a git repository.'
-}
-
-function Get-RelativePath {
-    param(
-        [string]$BasePath,
-        [string]$TargetPath
-    )
-
-    $baseUri = [Uri]((Resolve-Path -LiteralPath $BasePath).Path.TrimEnd('\') + '\')
-    $targetUri = [Uri]((Resolve-Path -LiteralPath $TargetPath).Path.TrimEnd('\') + '\')
-    $relativeUri = $baseUri.MakeRelativeUri($targetUri)
-    return [Uri]::UnescapeDataString($relativeUri.ToString()).TrimEnd('/')
-}
 
 function Run-Git {
     param(
@@ -45,11 +24,19 @@ function Run-Git {
     Push-Location -LiteralPath $WorkingDirectory
     try {
         if ($CaptureOutput) {
-            $output = & git @Arguments 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw ($output -join [Environment]::NewLine)
+            $stdoutFile = [System.IO.Path]::GetTempFileName()
+            try {
+                & git @Arguments 1> $stdoutFile
+                if ($LASTEXITCODE -ne 0) {
+                    throw "git command failed in `"$WorkingDirectory`": git $($Arguments -join ' ')"
+                }
+
+                $output = Get-Content -LiteralPath $stdoutFile -Encoding UTF8
+                return ($output -join [Environment]::NewLine).Trim()
             }
-            return ($output -join [Environment]::NewLine).Trim()
+            finally {
+                Remove-Item -LiteralPath $stdoutFile -ErrorAction SilentlyContinue
+            }
         }
 
         & git @Arguments
@@ -62,8 +49,63 @@ function Run-Git {
     }
 }
 
-$RepoRoot = Get-RepoRoot -StartPath $ScriptDir
-$RelPath = Get-RelativePath -BasePath $RepoRoot -TargetPath $ScriptDir
+function Clear-DirectoryContents {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [string[]]$Exclude = @()
+    )
+
+    Get-ChildItem -LiteralPath $Path -Force | Where-Object {
+        $Exclude -notcontains $_.Name
+    } | Remove-Item -Recurse -Force
+}
+
+function Sync-SubfolderToTempRepo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourcePath,
+        [Parameter(Mandatory = $true)]
+        [string]$TempRepoPath,
+        [Parameter(Mandatory = $true)]
+        [string]$RemoteUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$TargetBranch,
+        [Parameter(Mandatory = $true)]
+        [string]$CommitMessage
+    )
+
+    Run-Git -WorkingDirectory $TempRepoPath -Arguments @('init', '--initial-branch', $TargetBranch)
+    Run-Git -WorkingDirectory $TempRepoPath -Arguments @('remote', 'add', 'origin', $RemoteUrl)
+
+    & git -C $TempRepoPath fetch origin $TargetBranch '--depth=1'
+    $fetchExitCode = $LASTEXITCODE
+    if ($fetchExitCode -eq 0) {
+        Run-Git -WorkingDirectory $TempRepoPath -Arguments @('checkout', '-B', $TargetBranch, "origin/$TargetBranch")
+    }
+    else {
+        Write-Host "Remote branch $TargetBranch does not exist yet. A new branch will be created."
+    }
+
+    Clear-DirectoryContents -Path $TempRepoPath -Exclude @('.git')
+
+    Get-ChildItem -LiteralPath $SourcePath -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $TempRepoPath -Recurse -Force
+    }
+
+    Run-Git -WorkingDirectory $TempRepoPath -Arguments @('add', '-A')
+    & git -C $TempRepoPath diff --cached --quiet
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'Remote snapshot is already up to date.'
+        return
+    }
+
+    Run-Git -WorkingDirectory $TempRepoPath -Arguments @('commit', '-m', $CommitMessage)
+    Run-Git -WorkingDirectory $TempRepoPath -Arguments @('push', 'origin', "HEAD:refs/heads/$TargetBranch")
+}
+
+$RepoRoot = Run-Git -WorkingDirectory $ScriptDir -Arguments @('rev-parse', '--show-toplevel') -CaptureOutput
+$RelPath = Run-Git -WorkingDirectory $ScriptDir -Arguments @('rev-parse', '--show-prefix') -CaptureOutput
 
 if ([string]::IsNullOrWhiteSpace($RelPath)) {
     throw 'Error: this script must be placed in the project subfolder.'
@@ -108,13 +150,15 @@ if ($LASTEXITCODE -eq 0) {
 Write-Host 'Creating commit in parent repository...'
 Run-Git -WorkingDirectory $RepoRoot -Arguments @('commit', '-m', $CommitMessage)
 
-Write-Host "Building subtree split for $RelPath..."
-$splitSha = Run-Git -WorkingDirectory $RepoRoot -Arguments @('subtree', 'split', "--prefix=$RelPath") -CaptureOutput
-if ([string]::IsNullOrWhiteSpace($splitSha)) {
-    throw 'Error: failed to create subtree split.'
-}
+$tempRepoPath = Join-Path ([System.IO.Path]::GetTempPath()) ('xjtravelapp-publish-' + [System.Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tempRepoPath | Out-Null
 
-Write-Host "Pushing to $RemoteUrl ($TargetBranch) ..."
-Run-Git -WorkingDirectory $RepoRoot -Arguments @('push', $RemoteUrl, "$splitSha`:refs/heads/$TargetBranch")
+try {
+    Write-Host "Publishing $RelPath to $RemoteUrl ($TargetBranch) ..."
+    Sync-SubfolderToTempRepo -SourcePath $ScriptDir -TempRepoPath $tempRepoPath -RemoteUrl $RemoteUrl -TargetBranch $TargetBranch -CommitMessage $CommitMessage
+}
+finally {
+    Remove-Item -LiteralPath $tempRepoPath -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 Write-Host 'Done.'
