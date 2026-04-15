@@ -2,8 +2,8 @@
   <view class="page-shell">
     <view class="page-scroll">
       <view class="hero-gradient top-banner section">
-        <text class="banner-title">旅行指南</text>
-        <text class="banner-subtitle">行前准备、玩法建议与新疆旅行常识都在这里</text>
+        <text class="banner-title">攻略指南</text>
+        <text class="banner-subtitle">先看预览，再点进详情，后面也能无缝切到接口数据</text>
       </view>
 
       <view class="tips-shell section">
@@ -20,17 +20,42 @@
       </view>
 
       <view class="section section-block">
-        <text class="section-title">精选攻略</text>
-        <view class="guide-list">
-          <view v-for="item in guides" :key="item.id" class="card guide-card">
-            <view class="guide-image-wrap">
-              <CachedImage :src="item.image" image-class="cover-image" />
-              <view class="guide-tag">{{ item.category }}</view>
+        <view class="section-head">
+          <text class="section-title">精选攻略预览</text>
+          <text class="section-note">仿信息流预览，点击即可查看详情</text>
+        </view>
+
+        <view class="guide-feed">
+          <view v-for="item in guides" :key="item.id" class="card feed-card" @tap="openGuide(item.id)">
+            <view class="feed-top">
+              <view class="author-badge">攻</view>
+              <view class="feed-top-text">
+                <text class="feed-author">{{ item.author }}</text>
+                <text class="feed-meta muted-text">{{ item.publishDate }} · {{ item.location }}</text>
+              </view>
+              <view class="feed-tag">{{ item.category }}</view>
             </view>
-            <view class="guide-body">
-              <text class="guide-title">{{ item.title }}</text>
-              <text class="guide-desc muted-text">{{ item.excerpt }}</text>
-              <text class="guide-time muted-text">{{ item.readTime }}</text>
+
+            <view class="feed-body">
+              <view class="feed-copy">
+                <text class="feed-title">{{ item.title }}</text>
+                <text class="feed-desc muted-text">{{ item.excerpt }}</text>
+
+                <view class="highlight-list">
+                  <text v-for="tag in item.highlights" :key="tag" class="highlight-chip"># {{ tag }}</text>
+                </view>
+              </view>
+
+              <view class="feed-image-wrap">
+                <CachedImage :src="item.image" image-class="cover-image" />
+              </view>
+            </view>
+
+            <view class="feed-footer">
+              <text class="feed-stat">{{ item.readTime }}</text>
+              <text class="feed-stat">浏览 {{ item.views }}</text>
+              <text class="feed-stat">收藏感 {{ item.likes }}</text>
+              <text class="feed-link">查看详情</text>
             </view>
           </view>
         </view>
@@ -38,9 +63,9 @@
 
       <view class="section section-block">
         <view class="info-panel">
-          <text class="section-title">旅行基础信息</text>
+          <text class="section-title">接口预留说明</text>
           <view class="info-list">
-            <view v-for="item in essentialInfo" :key="item.label" class="info-row">
+            <view v-for="item in interfaceNotes" :key="item.label" class="info-row">
               <view class="info-dot"></view>
               <text class="info-text">
                 <text class="info-label">{{ item.label }}:</text>
@@ -59,68 +84,47 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import CachedImage from '../../components/CachedImage.vue'
+import { getGuideFeed } from '../../services/guides'
 
 const quickTips = [
   {
-    short: '季',
-    title: '最佳季节',
-    description: '5 月到 10 月更适合出行，天气舒适、景色层次也更丰富。',
+    short: '线',
+    title: '先定线路',
+    description: '新疆范围大，先定北疆、伊犁、南疆还是自驾线，再去补景点。',
   },
   {
-    short: '语',
-    title: '语言沟通',
-    description: '准备一些常用普通话表达，部分地区也能接触到维吾尔语。',
+    short: '住',
+    title: '先锁住宿',
+    description: '旺季核心景区房量紧，先锁住关键夜晚，比后面再补更稳。',
   },
   {
-    short: '费',
-    title: '预算规划',
-    description: '常规出行建议按每日 300 到 700 元预估住宿、餐饮与交通。',
+    short: '安',
+    title: '重视安全',
+    description: '山口、沙漠、长途自驾和昼夜温差，都是新疆出行里最常见的变量。',
   },
 ]
 
-const guides = [
-  {
-    id: 1,
-    title: '什么时候最适合去新疆',
-    category: '行程规划',
-    readTime: '5 分钟阅读',
-    image: 'https://images.unsplash.com/photo-1698253542757-dcafef34a137?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxLYW5hcyUyMGxha2UlMjBhdXR1bW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzc2MjQ2MzMzfDA&ixlib=rb-4.1.0&q=80&w=1080',
-    excerpt: '按季节挑选目的地，提前避开极端天气和旺季高峰，旅程会更轻松。',
-  },
-  {
-    id: 2,
-    title: '丝路美食不踩雷指南',
-    category: '吃喝推荐',
-    readTime: '8 分钟阅读',
-    image: 'https://images.unsplash.com/photo-1756363886854-b51467278a52?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYXphYXIlMjBtYXJrZXQlMjBzcGljZXMlMjBjb2xvcmZ1bHxlbnwxfHx8fDE3NzYyNDYzMzN8MA&ixlib=rb-4.1.0&q=80&w=1080',
-    excerpt: '从抓饭、烤包子到羊肉串，帮你快速找到新疆旅行中的高频美味。',
-  },
-  {
-    id: 3,
-    title: '沙漠穿越安全提醒',
-    category: '安全提示',
-    readTime: '6 分钟阅读',
-    image: 'https://images.unsplash.com/photo-1623336343731-1582577b8250?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxUYWtsYW1ha2FuJTIwZGVzZXJ0JTIwc2FuZCUyMGR1bmVzfGVufDF8fHx8MTc3NjI0NjMzMnww&ixlib=rb-4.1.0&q=80&w=1080',
-    excerpt: '做好补水、防晒和路线确认，沙漠项目更需要团队协作与专业安排。',
-  },
-  {
-    id: 4,
-    title: '天山徒步装备清单',
-    category: '户外探险',
-    readTime: '7 分钟阅读',
-    image: 'https://images.unsplash.com/photo-1766823282156-7e2de7f9f922?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxUaWFuY2hpJTIwaGVhdmVubHklMjBsYWtlJTIwWGluamlhbmclMjBtb3VudGFpbnN8ZW58MXx8fHwxNzc2MjQ2MzMxfDA&ixlib=rb-4.1.0&q=80&w=1080',
-    excerpt: '保暖、鞋服、路餐和应急物资缺一不可，高海拔徒步更要提前准备。',
-  },
+const interfaceNotes = [
+  { label: '列表接口', value: '已预留 `getGuideFeed()`，当前先走本地数据，后续可直接切接口' },
+  { label: '详情接口', value: '已预留 `getGuideDetail(id)`，详情页已按接口返回结构设计' },
+  { label: '当前策略', value: '先用原创攻略占位，后面接你自己的内容源或后台都方便' },
 ]
 
-const essentialInfo = [
-  { label: '货币', value: '人民币（CNY）' },
-  { label: '时区', value: 'UTC+8，北京时间' },
-  { label: '语言', value: '普通话、维吾尔语、哈萨克语等' },
-  { label: '气候', value: '大陆性气候明显，夏季较热、昼夜温差较大' },
-]
+const guides = ref([])
+
+onShow(async () => {
+  guides.value = await getGuideFeed()
+})
+
+function openGuide(id) {
+  uni.navigateTo({
+    url: `/pages/guide-detail/index?id=${encodeURIComponent(id)}`,
+  })
+}
 </script>
 
 <style scoped lang="scss">
@@ -143,6 +147,7 @@ const essentialInfo = [
   margin-top: 12rpx;
   font-size: 26rpx;
   opacity: 0.9;
+  line-height: 1.6;
 }
 
 .tips-shell {
@@ -150,7 +155,7 @@ const essentialInfo = [
 }
 
 .tips-list,
-.guide-list {
+.guide-feed {
   display: flex;
   flex-direction: column;
   gap: 22rpx;
@@ -178,21 +183,18 @@ const essentialInfo = [
   flex-shrink: 0;
 }
 
-.tip-content,
-.guide-body {
+.tip-content {
   display: flex;
   flex-direction: column;
 }
 
 .tip-title,
-.guide-title {
+.feed-title {
   font-size: 30rpx;
   font-weight: 600;
 }
 
-.tip-desc,
-.guide-desc,
-.guide-time {
+.tip-desc {
   margin-top: 8rpx;
   font-size: 24rpx;
   line-height: 1.6;
@@ -202,28 +204,122 @@ const essentialInfo = [
   margin-top: 40rpx;
 }
 
-.guide-card {
-  overflow: hidden;
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
-.guide-image-wrap {
-  position: relative;
-  height: 300rpx;
+.section-note {
+  font-size: 22rpx;
+  color: $theme-muted;
 }
 
-.guide-tag {
-  position: absolute;
-  top: 20rpx;
-  left: 20rpx;
-  padding: 10rpx 22rpx;
-  border-radius: 999rpx;
-  background: $theme-color;
+.feed-card {
+  padding: 24rpx;
+}
+
+.feed-top {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.author-badge {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(135deg, #c44536, #e29b52);
   color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.feed-top-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-author {
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.feed-meta {
+  margin-top: 6rpx;
   font-size: 22rpx;
 }
 
-.guide-body {
-  padding: 26rpx;
+.feed-tag {
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(196, 69, 54, 0.12);
+  color: $theme-color;
+  font-size: 22rpx;
+  flex-shrink: 0;
+}
+
+.feed-body {
+  margin-top: 22rpx;
+  display: flex;
+  gap: 20rpx;
+}
+
+.feed-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.highlight-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.highlight-chip {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(232, 168, 124, 0.16);
+  color: #9b5b2a;
+  font-size: 22rpx;
+}
+
+.feed-image-wrap {
+  width: 208rpx;
+  height: 208rpx;
+  overflow: hidden;
+  border-radius: 24rpx;
+  flex-shrink: 0;
+}
+
+.feed-footer {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 22rpx;
+  font-size: 22rpx;
+  color: $theme-muted;
+  flex-wrap: wrap;
+}
+
+.feed-link {
+  margin-left: auto;
+  color: $theme-color;
+  font-weight: 600;
 }
 
 .info-panel {

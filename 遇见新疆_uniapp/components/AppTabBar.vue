@@ -26,7 +26,7 @@ const props = defineProps({
 const items = [
   { path: '/pages/home/index', label: '首页', short: 'H' },
   { path: '/pages/destinations/index', label: '目的地', short: 'D' },
-  { path: '/pages/guides/index', label: '指南', short: 'G' },
+  { path: '/pages/guides/index', label: '攻略指南', short: 'G' },
   { path: '/pages/account/index', label: '我的', short: 'A' },
 ]
 

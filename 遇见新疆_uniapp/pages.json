@@ -17,7 +17,14 @@
     {
       "path": "pages/guides/index",
       "style": {
-        "navigationBarTitleText": "旅行指南",
+        "navigationBarTitleText": "攻略指南",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/guide-detail/index",
+      "style": {
+        "navigationBarTitleText": "攻略详情",
         "navigationStyle": "custom"
       }
     },
