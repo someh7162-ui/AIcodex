@@ -3,11 +3,16 @@
     <view class="page-scroll">
       <view class="hero-gradient profile-banner section">
         <view class="profile-row">
-          <view class="avatar">疆游</view>
+          <view class="avatar">{{ profileInitial }}</view>
           <view class="profile-meta">
-            <text class="profile-name">新疆漫游者</text>
-            <text class="profile-email">explorer@meetxinjiang.com</text>
+            <text class="profile-name">{{ profileName }}</text>
+            <text class="profile-email">{{ profileEmail }}</text>
           </view>
+        </view>
+
+        <view v-if="!isLoggedIn" class="guest-actions">
+          <view class="hero-action primary" @tap="goAuth('login')">去登录</view>
+          <view class="hero-action secondary" @tap="goAuth('register')">去注册</view>
         </view>
       </view>
 
@@ -20,7 +25,7 @@
         </view>
       </view>
 
-      <view class="section section-block">
+      <view v-if="isLoggedIn" class="section section-block">
         <text class="section-title">最近收藏</text>
         <view class="saved-list">
           <view v-for="item in savedDestinations" :key="item.id" class="card saved-item">
@@ -36,10 +41,22 @@
         </view>
       </view>
 
+      <view v-else class="section section-block">
+        <text class="section-title">登录后可用</text>
+        <view class="card guest-card">
+          <text class="guest-title">同步你的新疆旅行档案</text>
+          <text class="guest-desc muted-text">登录后可接入收藏、行程、通知和后续 PostgreSQL 云端数据。</text>
+          <view class="guest-inline-actions">
+            <view class="inline-btn" @tap="goAuth('login')">登录账号</view>
+            <view class="inline-btn ghost" @tap="goAuth('register')">注册新账号</view>
+          </view>
+        </view>
+      </view>
+
       <view class="section section-block">
         <text class="section-title">账户设置</text>
         <view class="card menu-card">
-          <view v-for="(item, index) in menuItems" :key="item.label" class="menu-wrap">
+          <view v-for="(item, index) in visibleMenuItems" :key="item.label" class="menu-wrap">
             <view class="menu-item">
               <view class="menu-left">
                 <view class="menu-icon">{{ item.short }}</view>
@@ -51,13 +68,19 @@
                 <text class="saved-arrow">></text>
               </view>
             </view>
-            <view v-if="index < menuItems.length - 1" class="menu-divider"></view>
+            <view v-if="index < visibleMenuItems.length - 1" class="menu-divider"></view>
           </view>
         </view>
       </view>
 
       <view class="section section-block">
-        <view class="logout-button">退出登录</view>
+        <view
+          class="logout-button"
+          :class="{ disabled: !isLoggedIn }"
+          @tap="handlePrimaryAction"
+        >
+          {{ isLoggedIn ? '退出登录' : '前往登录 / 注册' }}
+        </view>
       </view>
 
       <view class="section app-info">
@@ -73,12 +96,28 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
+import {
+  clearAuthSession,
+  getStoredAuthToken,
+  getStoredAuthUser,
+} from '../../common/auth-storage'
 
-const profileStats = [
+const currentUser = ref(null)
+const authToken = ref('')
+
+const loggedInStats = [
   { value: '12', label: '已去过' },
   { value: '8', label: '已收藏' },
   { value: '24', label: '点评数' },
+]
+
+const guestStats = [
+  { value: '0', label: '云端收藏' },
+  { value: '0', label: '同步行程' },
+  { value: '0', label: '账号消息' },
 ]
 
 const savedDestinations = [
@@ -87,13 +126,69 @@ const savedDestinations = [
   { id: 3, name: '喀纳斯', date: '2 周前收藏' },
 ]
 
-const menuItems = [
+const loggedInMenuItems = [
   { short: '藏', label: '我的收藏', count: 3 },
   { short: '行', label: '旅行足迹', count: 5 },
   { short: '消', label: '消息通知', count: 3 },
   { short: '语', label: '语言设置', value: '简体中文' },
   { short: '设', label: '通用设置' },
 ]
+
+const guestMenuItems = [
+  { short: '登', label: '登录账号', value: '同步旅行信息' },
+  { short: '注', label: '注册账号', value: '预留 PostgreSQL 接口' },
+  { short: '语', label: '语言设置', value: '简体中文' },
+  { short: '设', label: '通用设置' },
+]
+
+const isLoggedIn = computed(() => Boolean(authToken.value || currentUser.value))
+const profileStats = computed(() => (isLoggedIn.value ? loggedInStats : guestStats))
+const visibleMenuItems = computed(() => (isLoggedIn.value ? loggedInMenuItems : guestMenuItems))
+const profileName = computed(() => currentUser.value?.nickname || '新疆漫游者')
+const profileEmail = computed(() => currentUser.value?.email || '登录后同步收藏与行程')
+const profileInitial = computed(() => {
+  const source = profileName.value || '疆游'
+  return source.slice(0, 2)
+})
+
+onShow(() => {
+  loadAuthState()
+})
+
+function loadAuthState() {
+  authToken.value = getStoredAuthToken()
+  currentUser.value = getStoredAuthUser()
+}
+
+function goAuth(mode = 'login') {
+  uni.navigateTo({
+    url: `/pages/auth/index?mode=${mode}`,
+  })
+}
+
+function handlePrimaryAction() {
+  if (!isLoggedIn.value) {
+    goAuth('login')
+    return
+  }
+
+  uni.showModal({
+    title: '退出登录',
+    content: '确认退出当前账号吗？本地登录态会被清除。',
+    success: ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+
+      clearAuthSession()
+      loadAuthState()
+      uni.showToast({
+        title: '已退出登录',
+        icon: 'none',
+      })
+    },
+  })
+}
 </script>
 
 <style scoped lang="scss">
@@ -140,6 +235,41 @@ const menuItems = [
   opacity: 0.82;
 }
 
+.guest-actions {
+  margin-top: 28rpx;
+  display: flex;
+  gap: 16rpx;
+}
+
+.hero-action,
+.inline-btn {
+  min-height: 76rpx;
+  padding: 0 30rpx;
+  border-radius: 999rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.hero-action.primary,
+.inline-btn {
+  background: #ffffff;
+  color: $theme-color;
+}
+
+.hero-action.secondary,
+.inline-btn.ghost {
+  border: 2rpx solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.inline-btn.ghost {
+  color: $theme-color;
+  border-color: rgba(196, 69, 54, 0.18);
+}
+
 .stats-shell {
   margin-top: -52rpx;
   position: relative;
@@ -184,6 +314,32 @@ const menuItems = [
   flex-direction: column;
   gap: 18rpx;
   margin-top: 24rpx;
+}
+
+.guest-card {
+  margin-top: 24rpx;
+  padding: 28rpx;
+}
+
+.guest-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: $theme-text;
+}
+
+.guest-desc {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.guest-inline-actions {
+  margin-top: 24rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
 }
 
 .saved-item,
@@ -291,6 +447,10 @@ const menuItems = [
   color: $theme-color;
   font-size: 30rpx;
   font-weight: 600;
+}
+
+.logout-button.disabled {
+  opacity: 0.88;
 }
 
 .app-info {

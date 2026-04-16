@@ -192,6 +192,8 @@
               <text class="typing-text">AI 正在整理建议...</text>
             </view>
           </view>
+
+          <view id="ai-response-anchor" class="response-anchor"></view>
         </view>
       </view>
 
@@ -220,7 +222,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import { AI_MESSAGE_STORAGE, clearAiMessages, getAiApiKey, saveAiApiKey } from '../../config/ai'
@@ -484,12 +486,24 @@ async function runConnectionTest() {
 }
 
 function clearConversation() {
-  messages.value = []
-  clearAiMessages()
-  errorMessage.value = ''
-  uni.showToast({
-    title: '会话已清空',
-    icon: 'none',
+  uni.showModal({
+    title: '清空会话',
+    content: '确认清空当前 AI 对话记录吗？清空后无法恢复。',
+    confirmText: '确认清空',
+    cancelText: '取消',
+    success: ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+
+      messages.value = []
+      clearAiMessages()
+      errorMessage.value = ''
+      uni.showToast({
+        title: '会话已清空',
+        icon: 'none',
+      })
+    },
   })
 }
 
@@ -511,11 +525,13 @@ async function sendQuestion(question, extraContext = '') {
   messages.value = nextMessages
   persistMessages()
   sending.value = true
+  await scrollToConversationBottom()
 
   try {
     const answer = await chatWithTravelAssistant(nextMessages, extraContext)
     messages.value = [...nextMessages, createMessage('assistant', answer)]
     persistMessages()
+    await scrollToConversationBottom()
   } catch (error) {
     messages.value = nextMessages
     persistMessages()
@@ -528,6 +544,17 @@ async function sendQuestion(question, extraContext = '') {
   } finally {
     sending.value = false
   }
+}
+
+async function scrollToConversationBottom() {
+  await nextTick()
+
+  setTimeout(() => {
+    uni.pageScrollTo({
+      selector: '#ai-response-anchor',
+      duration: 280,
+    })
+  }, 80)
 }
 
 function sendDraft() {
@@ -1118,6 +1145,11 @@ function sendIncomingPrompt() {
 .typing-text {
   font-size: 22rpx;
   color: $theme-muted;
+}
+
+.response-anchor {
+  width: 100%;
+  height: 2rpx;
 }
 
 .composer-space {

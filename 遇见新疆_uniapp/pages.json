@@ -43,6 +43,13 @@
       }
     },
     {
+      "path": "pages/auth/index",
+      "style": {
+        "navigationBarTitleText": "登录注册",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/destination-detail/index",
       "style": {
         "navigationBarTitleText": "目的地详情",
