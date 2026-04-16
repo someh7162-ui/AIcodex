@@ -16,6 +16,48 @@
       </view>
 
       <view class="section section-block">
+        <text class="section-title">景区介绍</text>
+        <view class="story-card card">
+          <view class="travel-meta-grid">
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">推荐季节</text>
+              <text class="travel-meta-value">{{ destinationTravelMeta.season }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">建议停留</text>
+              <text class="travel-meta-value">{{ destinationTravelMeta.stay }}</text>
+            </view>
+            <view class="travel-meta-item full-width">
+              <text class="travel-meta-label">适合人群</text>
+              <text class="travel-meta-value">{{ destinationTravelMeta.audience }}</text>
+            </view>
+          </view>
+          <view class="visit-meta-grid">
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">门票参考</text>
+              <text class="travel-meta-value">{{ destinationVisitMeta.ticket }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">开放时间</text>
+              <text class="travel-meta-value">{{ destinationVisitMeta.openHours }}</text>
+            </view>
+          </view>
+          <view class="story-row">
+            <text class="story-label">景区概览</text>
+            <text class="story-text">{{ destinationCulture.overview }}</text>
+          </view>
+          <view class="story-row">
+            <text class="story-label">历史由来</text>
+            <text class="story-text">{{ destinationCulture.history }}</text>
+          </view>
+          <view class="story-row last-row">
+            <text class="story-label">值得了解</text>
+            <text class="story-text">{{ destinationCulture.highlights }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section section-block">
         <text class="section-title">地图与定位</text>
         <view class="map-card card">
           <view class="map-head">
@@ -159,7 +201,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
-import { getDestinationById, getDouyinSearchUrl } from '../../common/destination-data'
+import { getDestinationById, getDestinationCulture, getDestinationTravelMeta, getDestinationVisitMeta, getDouyinSearchUrl } from '../../common/destination-data'
 import { getCurrentLocation, getDrivingRoute, getLiveWeather, getStaticMapUrl, getWalkingRoute, reverseGeocode } from '../../services/amap'
 import { hasAmapKey } from '../../config/amap'
 
@@ -171,6 +213,20 @@ const routeModeOptions = [
 
 const currentId = ref('')
 const destination = computed(() => getDestinationById(currentId.value))
+const destinationCulture = computed(() => getDestinationCulture(currentId.value) || {
+  overview: '',
+  history: '',
+  highlights: '',
+})
+const destinationTravelMeta = computed(() => getDestinationTravelMeta(currentId.value) || {
+  season: '',
+  stay: '',
+  audience: '',
+})
+const destinationVisitMeta = computed(() => getDestinationVisitMeta(currentId.value) || {
+  ticket: '',
+  openHours: '',
+})
 
 const locationReady = ref(false)
 const locationStatusText = ref('未定位')
@@ -567,6 +623,92 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
 
 .section-block {
   margin-top: 36rpx;
+}
+
+.story-card {
+  margin-top: 24rpx;
+  padding: 28rpx;
+}
+
+.travel-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.visit-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.travel-meta-item {
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.12);
+  border: 2rpx solid rgba(232, 168, 124, 0.24);
+}
+
+.travel-meta-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.travel-meta-label {
+  display: block;
+  font-size: 22rpx;
+  color: $theme-muted;
+}
+
+.travel-meta-value {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: $theme-text;
+  font-weight: 600;
+}
+
+.story-row {
+  padding-bottom: 24rpx;
+  margin-bottom: 24rpx;
+  border-bottom: 2rpx solid rgba(196, 69, 54, 0.08);
+}
+
+.story-row.last-row {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+.story-label {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $theme-color;
+}
+
+.story-text {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.8;
+  color: $theme-text;
+}
+
+@media screen and (max-width: 720rpx) {
+  .travel-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .visit-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .travel-meta-item.full-width {
+    grid-column: auto;
+  }
 }
 
 .map-card,

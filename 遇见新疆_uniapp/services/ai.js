@@ -24,12 +24,15 @@ const essentialInfo = [
   { label: '气候', value: '大陆性气候明显，夏季较热、昼夜温差较大' },
 ]
 
+const MAX_DESTINATION_CONTEXT_ITEMS = 24
+const MAX_GUIDE_CONTEXT_ITEMS = 8
+
 function request(url, data) {
   return new Promise((resolve, reject) => {
     uni.request({
       url,
       method: 'POST',
-      timeout: 30000,
+      timeout: 60000,
       header: {
         Authorization: `Bearer ${getAiApiKey()}`,
         'Content-Type': 'application/json',
@@ -52,17 +55,25 @@ function request(url, data) {
 }
 
 function buildDestinationSummary() {
-  return destinationList
+  const featuredItems = destinationList
+    .slice(0, MAX_DESTINATION_CONTEXT_ITEMS)
     .map((item) => {
-      const tips = item.tips.join('；')
-      const weather = `${item.weather.condition}，${item.weather.temperature}，${item.weather.wind}`
-      return `${item.name}（${item.location}，${item.category}，评分${item.rating}）：${item.description}。建议：${item.suggestion}。提示：${tips}。示例天气：${weather}。`
+      const tips = item.tips.slice(0, 2).join('；')
+      return `${item.name}（${item.location}，${item.category}）：${item.description}。建议：${item.suggestion}。提示：${tips}。`
     })
     .join('\n')
+
+  const remainingNames = destinationList
+    .slice(MAX_DESTINATION_CONTEXT_ITEMS)
+    .map((item) => item.name)
+    .join('、')
+
+  return remainingNames ? `${featuredItems}\n其他可参考景区：${remainingNames}` : featuredItems
 }
 
 function buildGuideSummary() {
   const guideText = getGuideList()
+    .slice(0, MAX_GUIDE_CONTEXT_ITEMS)
     .map((item) => `${item.title}（${item.category}）：${item.excerpt}`)
     .join('\n')
 
@@ -131,6 +142,10 @@ function formatErrorMessage(error) {
   return message
 }
 
+function isAssistantTruncated(data) {
+  return data?.choices?.[0]?.finish_reason === 'length'
+}
+
 export function getTravelAssistantPresetQuestions() {
   return [
     '第一次去新疆怎么玩比较合适？',
@@ -196,15 +211,19 @@ export async function chatWithTravelAssistant(messages, context = '') {
     ],
     enable_thinking: false,
     temperature: 0.6,
-    max_tokens: 800,
+    max_tokens: 1800,
   }
 
   try {
     const data = await request(`${AI_BASE_URL}/chat/completions`, payload)
-    const text = getAssistantText(data?.choices?.[0]?.message?.content)
+    let text = getAssistantText(data?.choices?.[0]?.message?.content)
 
     if (!text) {
       throw new Error('模型没有返回有效内容。')
+    }
+
+    if (isAssistantTruncated(data)) {
+      text = `${text}\n\n> 内容较长，可继续追问“继续”获取后续建议。`
     }
 
     return text

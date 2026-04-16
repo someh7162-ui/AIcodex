@@ -48,6 +48,24 @@
         </view>
       </view>
 
+      <view class="section section-block">
+        <view class="section-head">
+          <text class="section-title">小众推荐</text>
+          <text class="muted-text niche-note">适合想避开常规热门点的人</text>
+        </view>
+        <view class="niche-list">
+          <view v-for="item in nicheDestinations" :key="item.id" class="niche-card card" @tap="openDetail(item.id)">
+            <view class="niche-head">
+              <text class="niche-title">{{ item.name }}</text>
+              <text class="niche-badge">{{ item.category }}</text>
+            </view>
+            <text class="destination-meta muted-text">{{ item.location }}</text>
+            <text class="niche-desc muted-text">{{ item.description }}</text>
+            <text class="niche-reason">{{ item.suggestion }}</text>
+          </view>
+        </view>
+      </view>
+
       <view class="section section-block last-block">
         <text class="section-title">热门玩法</text>
         <view class="activity-grid">
@@ -100,6 +118,10 @@ const featuredDestinations = computed(() => {
 })
 
 const featuredSectionTitle = computed(() => (currentCoords.value ? '附近景区' : '精选景区'))
+
+const nicheDestinationIds = [63, 64, 65, 66, 67]
+
+const nicheDestinations = computed(() => destinationList.filter((item) => nicheDestinationIds.includes(item.id)))
 
 const activities = [
   { short: '丝', title: '丝路人文漫游' },
@@ -337,6 +359,58 @@ function formatDistance(distanceKm) {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+}
+
+.niche-note {
+  font-size: 22rpx;
+}
+
+.niche-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18rpx;
+}
+
+.niche-card {
+  padding: 26rpx;
+}
+
+.niche-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.niche-title {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.niche-badge {
+  flex-shrink: 0;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(196, 69, 54, 0.1);
+  color: $theme-color;
+  font-size: 21rpx;
+}
+
+.niche-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.niche-reason {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 23rpx;
+  line-height: 1.7;
+  color: $theme-color;
 }
 
 .destination-card {

@@ -33,3 +33,7 @@ export function saveAiApiKey(value) {
   uni.setStorageSync(AI_API_KEY_STORAGE, trimmed)
   return trimmed
 }
+
+export function clearAiMessages() {
+  uni.removeStorageSync(AI_MESSAGE_STORAGE)
+}

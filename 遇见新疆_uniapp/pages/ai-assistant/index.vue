@@ -101,8 +101,14 @@
 
       <view class="section section-block">
         <view class="dialogue-head">
-          <text class="section-title">对话记录</text>
-          <text class="dialogue-note muted-text">面向新疆旅游场景优先回答</text>
+          <view>
+            <text class="section-title">智能顾问工作台</text>
+            <text class="dialogue-note muted-text">结构化输出新疆旅行建议</text>
+          </view>
+          <view class="dialogue-state" :class="{ active: sending }">
+            <text class="dialogue-state-dot"></text>
+            <text>{{ sending ? '生成中' : `${messages.length} 条记录` }}</text>
+          </view>
         </view>
 
         <view v-if="errorMessage" class="error-banner">
@@ -122,11 +128,61 @@
               v-for="item in messages"
               :key="item.id"
               class="message-row"
-              :class="{ mine: item.role === 'user' }"
+              :class="{ mine: item.role === 'user', assistant: item.role === 'assistant' }"
             >
               <view class="message-bubble" :class="{ 'assistant-bubble': item.role === 'assistant' }">
                 <text class="message-role">{{ item.role === 'user' ? '用户' : 'AI助手' }}</text>
-                <text class="message-content">{{ item.content }}</text>
+                <text v-if="item.role === 'user'" class="message-content user-content">{{ item.content }}</text>
+                <view v-else class="assistant-markdown">
+                  <block v-for="(block, blockIndex) in getMessageBlocks(item)" :key="`${item.id}-${blockIndex}`">
+                    <text
+                      v-if="block.type === 'heading'"
+                      class="markdown-heading"
+                      :class="`level-${block.level}`"
+                    >
+                      <text
+                        v-for="(segment, segmentIndex) in block.segments"
+                        :key="segmentIndex"
+                        :class="{ strong: segment.strong }"
+                      >{{ segment.text }}</text>
+                    </text>
+
+                    <view v-else-if="block.type === 'list'" class="markdown-list">
+                      <view
+                        v-for="(listItem, listIndex) in block.items"
+                        :key="listIndex"
+                        class="markdown-list-row"
+                      >
+                        <text class="markdown-marker">
+                          {{ block.ordered ? `${listIndex + 1}.` : '•' }}
+                        </text>
+                        <view class="markdown-list-content">
+                          <text
+                            v-for="(segment, segmentIndex) in listItem.segments"
+                            :key="segmentIndex"
+                            :class="{ strong: segment.strong }"
+                          >{{ segment.text }}</text>
+                        </view>
+                      </view>
+                    </view>
+
+                    <view v-else-if="block.type === 'note'" class="markdown-note">
+                      <text
+                        v-for="(segment, segmentIndex) in block.segments"
+                        :key="segmentIndex"
+                        :class="{ strong: segment.strong }"
+                      >{{ segment.text }}</text>
+                    </view>
+
+                    <text v-else class="markdown-paragraph">
+                      <text
+                        v-for="(segment, segmentIndex) in block.segments"
+                        :key="segmentIndex"
+                        :class="{ strong: segment.strong }"
+                      >{{ segment.text }}</text>
+                    </text>
+                  </block>
+                </view>
               </view>
             </view>
           </view>
@@ -149,11 +205,11 @@
           v-model="draft"
           class="composer-input"
           auto-height
-          maxlength="500"
-          placeholder="问点具体的，比如：第一次去新疆 5 天怎么安排？"
+          maxlength="800"
+          placeholder="输入你的旅行问题，例如：新疆 7 天怎么安排？"
         />
         <view class="composer-foot">
-          <text class="muted-text composer-hint">优先回答新疆旅行相关问题</text>
+          <text class="muted-text composer-hint">{{ hasApiKey ? '已连接 AI 旅游助手' : '请先填写内部 Key' }}</text>
           <view class="send-btn" :class="{ disabled: !canSend }" @tap="sendDraft">发送</view>
         </view>
       </view>
@@ -167,7 +223,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
-import { AI_MESSAGE_STORAGE, getAiApiKey, saveAiApiKey } from '../../config/ai'
+import { AI_MESSAGE_STORAGE, clearAiMessages, getAiApiKey, saveAiApiKey } from '../../config/ai'
 import {
   chatWithTravelAssistant,
   getTravelAssistantPresetQuestions,
@@ -191,6 +247,144 @@ const incomingContext = ref('')
 
 const hasApiKey = computed(() => Boolean(savedApiKey.value))
 const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value && hasApiKey.value)
+
+function getMessageBlocks(item) {
+  if (!item?.content) {
+    return []
+  }
+
+  return parseAssistantMarkdown(item.content)
+}
+
+function parseAssistantMarkdown(content) {
+  const lines = String(content)
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+
+  const blocks = []
+  let paragraphLines = []
+  let currentList = null
+
+  function flushParagraph() {
+    if (!paragraphLines.length) {
+      return
+    }
+
+    blocks.push({
+      type: 'paragraph',
+      segments: formatInlineMarkdown(paragraphLines.join('\n')),
+    })
+    paragraphLines = []
+  }
+
+  function flushList() {
+    if (!currentList) {
+      return
+    }
+
+    blocks.push(currentList)
+    currentList = null
+  }
+
+  lines.forEach((line) => {
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      flushParagraph()
+      flushList()
+      return
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
+    if (headingMatch) {
+      flushParagraph()
+      flushList()
+      blocks.push({
+        type: 'heading',
+        level: Math.min(headingMatch[1].length, 3),
+        segments: formatInlineMarkdown(headingMatch[2]),
+      })
+      return
+    }
+
+    const noteMatch = trimmed.match(/^>\s+(.+)$/)
+    if (noteMatch) {
+      flushParagraph()
+      flushList()
+      blocks.push({
+        type: 'note',
+        segments: formatInlineMarkdown(noteMatch[1]),
+      })
+      return
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/)
+    const orderedMatch = trimmed.match(/^\d+[.)]\s+(.+)$/)
+    if (unorderedMatch || orderedMatch) {
+      const ordered = Boolean(orderedMatch)
+      const text = orderedMatch?.[1] || unorderedMatch?.[1] || ''
+      flushParagraph()
+
+      if (!currentList || currentList.ordered !== ordered) {
+        flushList()
+        currentList = {
+          type: 'list',
+          ordered,
+          items: [],
+        }
+      }
+
+      currentList.items.push({
+        segments: formatInlineMarkdown(text),
+      })
+      return
+    }
+
+    flushList()
+    paragraphLines.push(trimmed)
+  })
+
+  flushParagraph()
+  flushList()
+
+  if (!blocks.length) {
+    return [{ type: 'paragraph', segments: formatInlineMarkdown(content) }]
+  }
+
+  return blocks
+}
+
+function formatInlineMarkdown(text) {
+  const segments = []
+  const source = String(text).replace(/`([^`]+)`/g, '$1')
+  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g
+  let lastIndex = 0
+  let match
+
+  while ((match = pattern.exec(source))) {
+    if (match.index > lastIndex) {
+      segments.push({
+        text: source.slice(lastIndex, match.index),
+        strong: false,
+      })
+    }
+
+    segments.push({
+      text: match[2] || match[3] || '',
+      strong: true,
+    })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < source.length) {
+    segments.push({
+      text: source.slice(lastIndex),
+      strong: false,
+    })
+  }
+
+  return segments.length ? segments : [{ text: source, strong: false }]
+}
 
 onLoad(async (options) => {
   incomingContextTitle.value = decodeParam(options?.title)
@@ -291,8 +485,12 @@ async function runConnectionTest() {
 
 function clearConversation() {
   messages.value = []
-  persistMessages()
+  clearAiMessages()
   errorMessage.value = ''
+  uni.showToast({
+    title: '会话已清空',
+    icon: 'none',
+  })
 }
 
 async function sendQuestion(question, extraContext = '') {
@@ -699,7 +897,36 @@ function sendIncomingPrompt() {
 }
 
 .dialogue-note {
+  display: block;
+  margin-top: 8rpx;
   font-size: 22rpx;
+}
+
+.dialogue-state {
+  min-width: 132rpx;
+  height: 56rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  background: rgba(255, 255, 255, 0.82);
+  color: $theme-muted;
+  font-size: 22rpx;
+  flex-shrink: 0;
+}
+
+.dialogue-state.active {
+  color: $theme-color;
+  background: rgba(196, 69, 54, 0.1);
+}
+
+.dialogue-state-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .error-banner {
@@ -714,10 +941,11 @@ function sendIncomingPrompt() {
 
 .dialogue-surface {
   margin-top: 24rpx;
-  padding: 28rpx;
-  border-radius: 30rpx;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 20rpx 42rpx rgba(45, 24, 16, 0.06);
+  padding: 30rpx;
+  border-radius: 34rpx;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 250, 245, 0.9));
+  border: 2rpx solid rgba(196, 69, 54, 0.08);
+  box-shadow: 0 24rpx 52rpx rgba(45, 24, 16, 0.07);
 }
 
 .empty-card {
@@ -740,11 +968,15 @@ function sendIncomingPrompt() {
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 28rpx;
 }
 
 .message-row {
   display: flex;
+}
+
+.message-row.assistant {
+  width: 100%;
 }
 
 .message-row.mine {
@@ -753,8 +985,8 @@ function sendIncomingPrompt() {
 
 .message-bubble {
   max-width: 86%;
-  padding: 24rpx;
-  border-radius: 24rpx;
+  padding: 26rpx;
+  border-radius: 26rpx;
   background: #f7f2ec;
 }
 
@@ -765,8 +997,12 @@ function sendIncomingPrompt() {
 }
 
 .assistant-bubble {
+  width: 100%;
+  max-width: 100%;
   background: #ffffff;
-  border-left: 6rpx solid rgba(196, 69, 54, 0.34);
+  border: 2rpx solid rgba(196, 69, 54, 0.09);
+  border-left: 8rpx solid rgba(196, 69, 54, 0.44);
+  box-shadow: 0 16rpx 34rpx rgba(45, 24, 16, 0.05);
 }
 
 .message-role {
@@ -783,6 +1019,89 @@ function sendIncomingPrompt() {
   font-size: 25rpx;
   line-height: 1.8;
   white-space: pre-wrap;
+}
+
+.user-content {
+  word-break: break-word;
+}
+
+.assistant-markdown {
+  margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.markdown-heading {
+  display: block;
+  color: $theme-text;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.markdown-heading.level-1 {
+  font-size: 34rpx;
+}
+
+.markdown-heading.level-2 {
+  font-size: 31rpx;
+}
+
+.markdown-heading.level-3 {
+  font-size: 28rpx;
+}
+
+.markdown-paragraph {
+  display: block;
+  color: $theme-text;
+  font-size: 26rpx;
+  line-height: 1.82;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.markdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.markdown-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+}
+
+.markdown-marker {
+  min-width: 34rpx;
+  color: $theme-color;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 1.8;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.markdown-list-content {
+  flex: 1;
+  color: $theme-text;
+  font-size: 26rpx;
+  line-height: 1.82;
+  word-break: break-word;
+}
+
+.markdown-note {
+  padding: 18rpx 22rpx;
+  border-radius: 22rpx;
+  background: rgba(196, 69, 54, 0.08);
+  color: $theme-color;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.strong {
+  font-weight: 700;
+  color: $theme-text;
 }
 
 .typing-row {
@@ -802,7 +1121,7 @@ function sendIncomingPrompt() {
 }
 
 .composer-space {
-  height: 276rpx;
+  height: 340rpx;
 }
 
 .composer-wrap {
@@ -810,19 +1129,20 @@ function sendIncomingPrompt() {
   left: 24rpx;
   right: 24rpx;
   bottom: calc(134rpx + env(safe-area-inset-bottom));
-  z-index: 15;
+  z-index: 18;
 }
 
 .composer {
-  padding: 18rpx;
-  border-radius: 30rpx;
+  padding: 16rpx;
+  border-radius: 32rpx;
   background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20rpx 46rpx rgba(45, 24, 16, 0.12);
 }
 
 .composer-input {
   width: 100%;
   min-height: 104rpx;
-  max-height: 220rpx;
+  max-height: 240rpx;
   padding: 18rpx 20rpx;
   border-radius: 24rpx;
   background: #f5efe8;
@@ -874,7 +1194,6 @@ function sendIncomingPrompt() {
   }
 
   .dialogue-head {
-    flex-direction: column;
     align-items: flex-start;
   }
 }
