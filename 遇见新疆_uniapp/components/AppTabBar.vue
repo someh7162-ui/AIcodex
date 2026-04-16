@@ -27,6 +27,7 @@ const items = [
   { path: '/pages/home/index', label: '首页', short: 'H' },
   { path: '/pages/destinations/index', label: '目的地', short: 'D' },
   { path: '/pages/guides/index', label: '攻略指南', short: 'G' },
+  { path: '/pages/ai-assistant/index', label: 'AI助手', short: 'AI' },
   { path: '/pages/account/index', label: '我的', short: 'A' },
 ]
 
@@ -58,7 +59,8 @@ function go(path) {
 }
 
 .tab-item {
-  width: 25%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -91,5 +93,6 @@ function go(path) {
 
 .tab-label {
   font-size: 22rpx;
+  white-space: nowrap;
 }
 </style>

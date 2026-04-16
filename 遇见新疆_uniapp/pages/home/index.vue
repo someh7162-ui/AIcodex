@@ -10,6 +10,7 @@
             <text class="hero-badge-dot"></text>
             <text class="hero-badge-text">{{ destinationList.length }} 个精选景区</text>
           </view>
+          <view class="hero-ai-btn" @tap="openAiPlanner">问 AI 规划新疆行程</view>
         </view>
       </view>
 
@@ -41,6 +42,7 @@
               <text class="destination-title">{{ item.name }}</text>
               <text class="destination-meta muted-text">{{ item.location }}<text v-if="item.distanceText"> · {{ item.distanceText }}</text></text>
               <text class="destination-desc muted-text">{{ item.description }}</text>
+              <view class="card-ai-link" @tap.stop="openAiForDestination(item)">问 AI 怎么玩</view>
             </view>
           </view>
         </view>
@@ -122,6 +124,53 @@ function goToDestinations() {
 
 function openDetail(id) {
   uni.navigateTo({ url: `/pages/destination-detail/index?id=${id}` })
+}
+
+function openAiPlanner() {
+  const featuredNames = featuredDestinations.value.map((item) => item.name).join('、')
+  const context = [
+    `首页推荐景区数：${destinationList.length}`,
+    `景区分类数：${scenicCategories.length - 1}`,
+    `覆盖地区数：${scenicRegions.length - 1}`,
+    `当前推荐景区：${featuredNames || '天山天池、喀纳斯景区、赛里木湖'}`,
+  ].join('\n')
+
+  navigateToAiAssistant({
+    title: '首页行程规划',
+    desc: '结合首页推荐景区，快速生成第一次来新疆的旅行路线。',
+    source: '首页',
+    prompt: '我是第一次来新疆，请根据热门景区帮我规划 5 天行程。',
+    context,
+    autoAsk: true,
+  })
+}
+
+function openAiForDestination(item) {
+  const context = [
+    `景区名称：${item.name}`,
+    `所在地区：${item.location}`,
+    `景区分类：${item.category}`,
+    `景区介绍：${item.description}`,
+    `适合玩法：${item.suggestion}`,
+    `游玩提示：${item.tips.join('；')}`,
+  ].join('\n')
+
+  navigateToAiAssistant({
+    title: item.name,
+    desc: item.description,
+    source: '首页',
+    prompt: `我准备去${item.name}，请先告诉我这个景区最适合怎么安排。`,
+    context,
+    autoAsk: false,
+  })
+}
+
+function navigateToAiAssistant(params) {
+  const query = Object.entries(params)
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+    .join('&')
+
+  uni.navigateTo({ url: `/pages/ai-assistant/index?${query}` })
 }
 
 function getDistanceKm(from, to) {
@@ -214,6 +263,21 @@ function formatDistance(distanceKm) {
 .hero-badge-text {
   font-size: 24rpx;
 }
+
+.hero-ai-btn {
+  margin-top: 26rpx;
+  min-width: 320rpx;
+  height: 84rpx;
+  padding: 0 34rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.92);
+  color: $theme-color;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  font-weight: 600;
+ }
 
 .stats-panel {
   margin-top: -54rpx;
@@ -340,6 +404,20 @@ function formatDistance(distanceKm) {
   margin-top: 8rpx;
   font-size: 24rpx;
   line-height: 1.6;
+}
+
+.card-ai-link {
+  margin-top: 18rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 68rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: rgba(196, 69, 54, 0.1);
+  color: $theme-color;
+  font-size: 23rpx;
+  font-weight: 600;
 }
 
 .activity-grid {

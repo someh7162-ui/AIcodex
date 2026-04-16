@@ -111,6 +111,16 @@
           <text class="suggestion-title">路线建议</text>
           <text class="suggestion-text">{{ destination.suggestion }}</text>
         </view>
+        <view class="ai-card card">
+          <view class="ai-copy">
+            <text class="suggestion-title">AI 行程助手</text>
+            <text class="ai-desc muted-text">把当前景区信息直接交给 AI，快速生成半日到一日玩法，或顺手问附近怎么串联更省心。</text>
+          </view>
+          <view class="ai-actions">
+            <view class="primary-btn" @tap="openAiAssistantForScenic">让 AI 生成当前景区玩法</view>
+            <view class="secondary-btn" @tap="openAiAssistantForRoute">问 AI 怎么安排这附近</view>
+          </view>
+        </view>
       </view>
 
       <view class="section section-block">
@@ -433,6 +443,59 @@ function openScenicLocation() {
     address: destination.value.location,
   })
 }
+
+function openAiAssistantForScenic() {
+  if (!destination.value) {
+    return
+  }
+
+  openAiAssistant({
+    prompt: `我正在看${destination.value.name}，请结合这个景区的特点，给我一份半天到一天的游玩建议。`,
+    autoAsk: true,
+  })
+}
+
+function openAiAssistantForRoute() {
+  if (!destination.value) {
+    return
+  }
+
+  openAiAssistant({
+    prompt: `如果我准备去${destination.value.name}，周边还能怎么安排更顺路？请给我一个适合当天或前后半天串联的建议。`,
+    autoAsk: false,
+  })
+}
+
+function openAiAssistant({ prompt, autoAsk }) {
+  if (!destination.value) {
+    return
+  }
+
+  const params = buildAiAssistantParams(destination.value, prompt, autoAsk)
+  uni.navigateTo({ url: `/pages/ai-assistant/index?${params}` })
+}
+
+function buildAiAssistantParams(item, prompt, autoAsk) {
+  const context = [
+    `景区名称：${item.name}`,
+    `所在地区：${item.location}`,
+    `景区分类：${item.category}`,
+    `景区介绍：${item.description}`,
+    `游玩提示：${item.tips.join('；')}`,
+    `路线建议：${item.suggestion}`,
+  ].join('\n')
+
+  return [
+    ['title', item.name],
+    ['desc', item.description],
+    ['source', '景区详情'],
+    ['prompt', prompt],
+    ['context', context],
+    ['autoAsk', autoAsk ? '1' : '0'],
+  ]
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&')
+}
 </script>
 
 <style scoped lang="scss">
@@ -725,6 +788,25 @@ function openScenicLocation() {
   border-radius: 28rpx;
   background: rgba(232, 168, 124, 0.16);
   border: 2rpx solid rgba(232, 168, 124, 0.34);
+}
+
+.ai-card {
+  margin-top: 22rpx;
+  padding: 28rpx;
+}
+
+.ai-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.ai-actions {
+  margin-top: 22rpx;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16rpx;
 }
 
 .live-card {

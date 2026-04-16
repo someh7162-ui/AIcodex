@@ -29,6 +29,13 @@
       }
     },
     {
+      "path": "pages/ai-assistant/index",
+      "style": {
+        "navigationBarTitleText": "AI旅游助手",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/account/index",
       "style": {
         "navigationBarTitleText": "我的",
