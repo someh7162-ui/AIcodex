@@ -2,7 +2,7 @@ import { destinationList } from '../common/destination-data'
 import { getGuideList } from '../common/guide-data'
 import { AI_BASE_URL, AI_MODEL, getAiApiKey } from '../config/ai'
 
-const SYSTEM_PROMPT = `你是“遇见新疆”App 内的 AI 旅游助手。你的主要职责是回答新疆旅行相关问题，并优先基于应用内已有景点、攻略和基础信息给出建议。
+const SYSTEM_PROMPT = `你是“云起天山”App 内的 AI 旅游助手。你的主要职责是回答新疆旅行相关问题，并优先基于应用内已有景点、攻略和基础信息给出建议。
 
 回答要求：
 1. 优先围绕新疆旅游、目的地推荐、出行季节、玩法、预算、装备、安全与美食给建议。

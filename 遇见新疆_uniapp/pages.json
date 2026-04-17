@@ -3,7 +3,7 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "遇见新疆",
+        "navigationBarTitleText": "云起天山",
         "navigationStyle": "custom"
       }
     },
@@ -87,7 +87,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "遇见新疆",
+    "navigationBarTitleText": "云起天山",
     "navigationBarBackgroundColor": "#FAF8F5",
     "backgroundColor": "#FAF8F5"
   },

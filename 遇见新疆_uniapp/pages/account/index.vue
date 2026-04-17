@@ -92,8 +92,8 @@
       </view>
 
       <view class="section app-info">
-        <text class="muted-text">遇见新疆 v1.0.0</text>
-        <text class="muted-text">© 2026 遇见新疆，保留所有权利</text>
+        <text class="muted-text">云起天山 v1.0.0</text>
+        <text class="muted-text">© 2026 云起天山，保留所有权利</text>
       </view>
       <view class="bottom-space"></view>
     </view>

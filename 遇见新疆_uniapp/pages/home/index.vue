@@ -4,7 +4,7 @@
       <view class="hero hero-gradient">
         <view class="hero-overlay"></view>
         <view class="hero-content">
-          <text class="hero-title">遇见新疆</text>
+          <text class="hero-title">云起天山</text>
           <text class="hero-subtitle">沿着丝路风景，开启一段辽阔而热烈的旅程</text>
           <view class="hero-badge">
             <text class="hero-badge-dot"></text>
