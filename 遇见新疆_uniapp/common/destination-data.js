@@ -1660,6 +1660,99 @@ const destinationVisitMetaMap = {
   67: { ticket: '多为免费或低门票参考', openHours: '通常 10:00-18:00 左右，建议提前确认' },
 }
 
+const safetyMapCategoryDefaults = {
+  '湖泊雪山': {
+    zoom: 14,
+    coverage: '核心湖岸、主观景台、游客中心一线',
+    terrainRisk: '临水区域湿滑，山地风力和温差变化明显。',
+    weatherRisk: '午后风大、低温和阵雨切换快。',
+    signalRisk: '观景台外沿和山体背坡可能出现信号波动。',
+    safeRoute: ['先到游客中心确认天气', '优先走主观景步道', '天色变差时沿原路折返'],
+    servicePoints: ['游客中心问询台', '主入口集合区', '景区摆渡上车点'],
+  },
+  '草原森林': {
+    zoom: 13,
+    coverage: '主入口、栈道草场、摆渡车停靠点一线',
+    terrainRisk: '草坡、木栈道和泥地在降雨后容易打滑。',
+    weatherRisk: '山地草原天气突变快，午后易起风。',
+    signalRisk: '林地深处和远离服务站区域信号偏弱。',
+    safeRoute: ['先进主服务区补给', '优先走官方栈道和观景车路线', '避免独自进入偏远草坡'],
+    servicePoints: ['游客服务站', '观景车停靠点', '临时避雨棚或休息点'],
+  },
+  '古城人文': {
+    zoom: 15,
+    coverage: '主街区、游客服务点、出口街口一线',
+    terrainRisk: '巷道较密，夜间和高峰时段需注意人流。',
+    weatherRisk: '夏季高温暴晒明显，夜游注意补水。',
+    signalRisk: '整体信号较稳，但老街深巷定位可能偏移。',
+    safeRoute: ['先记住主入口和出口', '按主街-支巷-主街顺序行走', '与同行人员约定集合点'],
+    servicePoints: ['游客中心', '警务室或安保点', '主街出口集合点'],
+  },
+  '沙漠峡谷': {
+    zoom: 13,
+    coverage: '主入口、观景平台、返程通道一线',
+    terrainRisk: '峡谷边缘、沙坡和碎石路段风险较高。',
+    weatherRisk: '大风、高温和临时封闭风险较高。',
+    signalRisk: '峡谷深处和沙丘后侧信号容易中断。',
+    safeRoute: ['先确认封闭公告', '沿景区既定观景路线行走', '不要离开防护栏或越过警戒线'],
+    servicePoints: ['主入口检票区', '观景平台集合点', '返程摆渡车停靠点'],
+  },
+  '胡杨湿地': {
+    zoom: 14,
+    coverage: '主栈道、水岸观景带、服务区一线',
+    terrainRisk: '木栈道、湿地区域和临水边缘较滑。',
+    weatherRisk: '秋季早晚温差大，风力会影响体感。',
+    signalRisk: '湿地深处和林带边缘信号可能波动。',
+    safeRoute: ['优先走木栈道主线', '不要进入封闭湿地区', '返程前确认集合时间'],
+    servicePoints: ['游客中心', '观景木栈道入口', '临水警示点'],
+  },
+  '峡谷地貌': {
+    zoom: 13,
+    coverage: '景区入口、主观景台、返程道路一线',
+    terrainRisk: '断崖、碎石坡和边缘区域要严格控距。',
+    weatherRisk: '山区风雨和落石风险要实时关注公告。',
+    signalRisk: '峡谷深处或山口区域信号不稳定。',
+    safeRoute: ['先看主观景点再向外延展', '不要跨越护栏拍照', '天气转坏时直接回主入口'],
+    servicePoints: ['主入口服务点', '观景台集合区', '景区返程道路口'],
+  },
+  '城市夜游': {
+    zoom: 15,
+    coverage: '主街区、停车点、夜游出口一线',
+    terrainRisk: '夜间人流密集，注意随身物品和分流路线。',
+    weatherRisk: '夏季夜游仍需补水，冬季注意路面结冰。',
+    signalRisk: '整体信号稳定，地下停车区可能减弱。',
+    safeRoute: ['先确认停车点或打车点', '夜游优先走主亮化街区', '离场高峰尽量提前返程'],
+    servicePoints: ['游客咨询台', '主入口安保点', '网约车上车点'],
+  },
+}
+
+const destinationSafetyMapMap = {
+  1: {
+    coverage: '天池主入口、游客中心、湖滨步道、观景平台一线',
+    emergencyLevel: '中高',
+    emergencyContacts: ['景区游客中心', '景区医务点', '阜康当地急救 120'],
+    highlights: ['建议把车停在官方停车区后乘摆渡进入', '环湖步道是最适合家庭游客的安全主线'],
+  },
+  2: {
+    coverage: '喀纳斯换乘中心、湖滨观景段、返程车站一线',
+    emergencyLevel: '高',
+    emergencyContacts: ['景区换乘中心服务台', '景区医疗救助点', '布尔津当地急救 120'],
+    highlights: ['景区纵深大，先确认返程车时间', '山区天气变化快，优先保存核心观景路线'],
+  },
+  9: {
+    coverage: '古城东门、主街区、游客中心、夜游出口一线',
+    emergencyLevel: '中',
+    emergencyContacts: ['古城游客中心', '古城警务站', '喀什当地急救 120'],
+    highlights: ['先记住东门或西门这类大地标', '夜游时建议把集合点设在主街宽阔区域'],
+  },
+  22: {
+    coverage: '帕米尔主观景点、公路停靠区、游客补给点一线',
+    emergencyLevel: '高',
+    emergencyContacts: ['沿线游客服务站', '塔县县城医院', '塔县急救 120'],
+    highlights: ['高原地区务必控制节奏', '离开县城前先备好离线图和补给'],
+  },
+}
+
 export function getDestinationById(id) {
   return destinationList.find((item) => String(item.id) === String(id))
 }
@@ -1786,6 +1879,44 @@ export function getDestinationVisitMeta(id) {
   return categoryDefaults[destination.category] || {
     ticket: '门票信息建议以景区当日公示为准',
     openHours: '开放时间建议以景区当日公告为准',
+  }
+}
+
+export function getDestinationSafetyMap(id) {
+  const destination = getDestinationById(id)
+
+  if (!destination) {
+    return null
+  }
+
+  const categoryConfig = safetyMapCategoryDefaults[destination.category] || {
+    zoom: 14,
+    coverage: '主入口与核心游览线',
+    terrainRisk: '请优先沿景区官方游线活动。',
+    weatherRisk: '请关注当天天气和景区公告。',
+    signalRisk: '远离主服务区时注意信号变化。',
+    safeRoute: ['先到游客中心获取信息', '沿主游线活动', '遇到天气变化及时返程'],
+    servicePoints: ['游客中心', '主入口', '集合点'],
+  }
+
+  const customConfig = destinationSafetyMapMap[String(destination.id)] || destinationSafetyMapMap[destination.id] || {}
+
+  return {
+    title: `${destination.name}安全图`,
+    zoom: customConfig.zoom || categoryConfig.zoom,
+    coverage: customConfig.coverage || categoryConfig.coverage,
+    emergencyLevel: customConfig.emergencyLevel || '中',
+    terrainRisk: customConfig.terrainRisk || categoryConfig.terrainRisk,
+    weatherRisk: customConfig.weatherRisk || categoryConfig.weatherRisk,
+    signalRisk: customConfig.signalRisk || categoryConfig.signalRisk,
+    safeRoute: customConfig.safeRoute || categoryConfig.safeRoute,
+    servicePoints: customConfig.servicePoints || categoryConfig.servicePoints,
+    emergencyContacts: customConfig.emergencyContacts || ['景区游客中心', '当地急救 120', '公安报警 110'],
+    highlights: customConfig.highlights || [
+      '建议在景区入口处先确认返程路线。',
+      '弱网区域优先依赖离线安全图和景区指示牌。',
+    ],
+    note: '当前安全图用于景区核心区域参考，不替代景区实时管制、官方公告和现场安保指引。',
   }
 }
 

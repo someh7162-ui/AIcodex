@@ -18,7 +18,7 @@ function request(url, data = {}) {
   })
 }
 
-export function getStaticMapUrl({ longitude, latitude, markers = [] }) {
+export function getStaticMapUrl({ longitude, latitude, markers = [], zoom = 11, size = '750*360' }) {
   if (!hasAmapKey() || longitude === undefined || latitude === undefined) {
     return ''
   }
@@ -27,10 +27,10 @@ export function getStaticMapUrl({ longitude, latitude, markers = [] }) {
     .map((item) => `${item.size || 'mid'},0xC44536,${item.label || ''}:${item.longitude},${item.latitude}`)
     .join('|')
 
-  return `https://restapi.amap.com/v3/staticmap?key=${encodeURIComponent(AMAP_WEB_KEY)}&size=750*360&scale=2&zoom=11&center=${longitude},${latitude}&markers=${encodeURIComponent(markerText)}`
+  return `https://restapi.amap.com/v3/staticmap?key=${encodeURIComponent(AMAP_WEB_KEY)}&size=${encodeURIComponent(size)}&scale=2&zoom=${zoom}&center=${longitude},${latitude}&markers=${encodeURIComponent(markerText)}`
 }
 
-export async function reverseGeocode(longitude, latitude) {
+export async function reverseGeocode(longitude, latitude, extensions = 'base') {
   if (!hasAmapKey()) {
     return null
   }
@@ -38,7 +38,7 @@ export async function reverseGeocode(longitude, latitude) {
   const data = await request('https://restapi.amap.com/v3/geocode/regeo', {
     key: AMAP_WEB_KEY,
     location: `${longitude},${latitude}`,
-    extensions: 'base',
+    extensions,
   })
 
   if (data.status !== '1' || !data.regeocode) {
@@ -46,6 +46,69 @@ export async function reverseGeocode(longitude, latitude) {
   }
 
   return data.regeocode
+}
+
+function normalizeLocationPart(value) {
+  if (Array.isArray(value)) {
+    return String(value[0] || '').trim()
+  }
+  return String(value || '').trim()
+}
+
+function compactLocationLabel(parts) {
+  return parts
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+export async function getNearbyLocationOptions(longitude, latitude) {
+  if (!hasAmapKey()) {
+    return []
+  }
+
+  const regeo = await reverseGeocode(longitude, latitude, 'all')
+  const address = regeo?.addressComponent || {}
+  const city = normalizeLocationPart(address.city) || normalizeLocationPart(address.province)
+  const district = normalizeLocationPart(address.district)
+  const options = []
+  const used = new Set()
+
+  const pushOption = (label, source = '') => {
+    const value = compactLocationLabel([city, label])
+    if (!value || used.has(value)) {
+      return
+    }
+    used.add(value)
+    options.push({
+      label: value,
+      value,
+      source,
+    })
+  }
+
+  pushOption(compactLocationLabel([district]), 'district')
+
+  const businessAreas = Array.isArray(address.businessAreas) ? address.businessAreas : []
+  businessAreas.forEach((item) => {
+    pushOption(compactLocationLabel([district, item?.name]), 'business')
+  })
+
+  const aois = Array.isArray(regeo?.aois) ? regeo.aois : []
+  aois.slice(0, 5).forEach((item) => {
+    pushOption(compactLocationLabel([district, item?.name]), 'aoi')
+  })
+
+  const pois = Array.isArray(regeo?.pois) ? regeo.pois : []
+  pois.slice(0, 8).forEach((item) => {
+    pushOption(compactLocationLabel([district, item?.name]), 'poi')
+  })
+
+  if (!options.length) {
+    pushOption(compactLocationLabel([district]) || normalizeLocationPart(address.province) || '新疆同城', 'fallback')
+  }
+
+  return options
 }
 
 export async function getLiveWeather(adcode) {
@@ -108,13 +171,77 @@ export async function getWalkingRoute(origin, destination) {
 }
 
 export async function getCurrentLocation() {
+  const attempts = [
+    { label: 'uni-gcj02', run: () => requestUniLocation('gcj02') },
+    { label: 'uni-wgs84', run: () => requestUniLocation('wgs84') },
+    { label: 'plus-geolocation', run: () => requestPlusLocation() },
+  ]
+
+  let lastError = null
+  const errors = []
+  for (const attempt of attempts) {
+    try {
+      const location = await attempt.run()
+      if (location) {
+        console.log(`[hiking-location] success via ${attempt.label}`, location)
+        return location
+      }
+    } catch (error) {
+      lastError = error
+      const message = error?.message || String(error)
+      errors.push(`${attempt.label}: ${message}`)
+      console.warn(`[hiking-location] failed via ${attempt.label}`, error)
+    }
+  }
+
+  const detail = errors.length ? `；${errors.join(' | ')}` : ''
+  throw new Error((lastError?.message || '定位失败，请检查系统定位服务是否开启') + detail)
+}
+
+function requestUniLocation(type = 'gcj02') {
   return new Promise((resolve, reject) => {
     uni.getLocation({
-      type: 'gcj02',
+      type,
       isHighAccuracy: true,
+      highAccuracyExpireTime: 12000,
+      geocode: false,
       success: resolve,
       fail: reject,
     })
+  })
+}
+
+function requestPlusLocation() {
+  return new Promise((resolve, reject) => {
+    if (typeof plus === 'undefined' || !plus.geolocation || typeof plus.geolocation.getCurrentPosition !== 'function') {
+      reject(new Error('当前环境不支持 plus 定位'))
+      return
+    }
+
+    plus.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = position?.coords || {}
+        resolve({
+          latitude: Number(coords.latitude),
+          longitude: Number(coords.longitude),
+          altitude: Number(coords.altitude || 0),
+          accuracy: Number(coords.accuracy || 0),
+          speed: Number(coords.speed || 0),
+          timestamp: Number(position.timestamp || Date.now()),
+          provider: 'plus-geolocation',
+        })
+      },
+      (error) => {
+        reject(new Error(error?.message || 'plus 定位失败'))
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+        provider: 'system',
+        coordsType: 'gcj02',
+      },
+    )
   })
 }
 

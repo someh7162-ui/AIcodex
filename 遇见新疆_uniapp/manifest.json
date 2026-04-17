@@ -8,6 +8,11 @@
   "app-plus": {
     "usingComponents": true,
     "nvueStyleCompiler": "uni-app",
+    "networkTimeout": {
+      "request": 15000,
+      "uploadFile": 30000
+    },
+    "ssl": "none",
     "splashscreen": {
       "alwaysShowBeforeRender": true,
       "waiting": true,

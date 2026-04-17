@@ -37,3 +37,76 @@ export async function loginWithPassword(payload) {
 export async function registerWithPassword(payload) {
   return request('/auth/register', payload)
 }
+
+function authRequest(path, method, token, data) {
+  return new Promise((resolve, reject) => {
+    if (!hasAuthApiBaseUrl()) {
+      reject(new Error('认证服务地址未配置'))
+      return
+    }
+    uni.request({
+      url: `${AUTH_API_BASE_URL}${path}`,
+      method,
+      timeout: 15000,
+      header: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      data: method === 'GET' ? undefined : data,
+      success: (res) => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(res.data?.message || `请求失败(${res.statusCode})`))
+          return
+        }
+        resolve(res.data || {})
+      },
+      fail: () => reject(new Error('无法连接服务器')),
+    })
+  })
+}
+
+export function uploadAvatar(token, filePath) {
+  return new Promise((resolve, reject) => {
+    if (!hasAuthApiBaseUrl()) { reject(new Error('认证服务地址未配置')); return }
+    uni.uploadFile({
+      url: `${AUTH_API_BASE_URL}/users/me/avatar`,
+      filePath,
+      name: 'avatar',
+      header: { Authorization: `Bearer ${token}` },
+      success: (res) => {
+        const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+        if (res.statusCode < 200 || res.statusCode >= 300) { reject(new Error(data?.message || '上传失败')); return }
+        resolve(data)
+      },
+      fail: () => reject(new Error('上传失败，请检查网络')),
+    })
+  })
+}
+
+export function updateUserProfile(token, payload) {
+  return authRequest('/users/me', 'PATCH', token, payload)
+}
+
+export function getMyGuides(token) {
+  return authRequest('/users/me/guides', 'GET', token, undefined)
+}
+
+export function getMyFavoriteGuides(token) {
+  return authRequest('/users/me/favorites/guides', 'GET', token, undefined)
+}
+
+export function getMyStats(token) {
+  return authRequest('/users/me/stats', 'GET', token, undefined)
+}
+
+export function getUserProfile(userId, token = '') {
+  return authRequest(`/users/${encodeURIComponent(userId)}/profile`, 'GET', token, undefined)
+}
+
+export function followUser(token, userId) {
+  return authRequest(`/users/${encodeURIComponent(userId)}/follow`, 'POST', token, undefined)
+}
+
+export function unfollowUser(token, userId) {
+  return authRequest(`/users/${encodeURIComponent(userId)}/follow`, 'DELETE', token, undefined)
+}

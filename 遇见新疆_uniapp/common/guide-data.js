@@ -229,10 +229,138 @@ const guideList = [
   }
 ]
 
+const guideAuthors = [
+  {
+    nickname: '北境慢游局',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+  {
+    nickname: '公路旅人阿远',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+  {
+    nickname: '喀什夜色札记',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+  {
+    nickname: '边地安全官',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+  {
+    nickname: '天山装备社',
+    avatar: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+  {
+    nickname: '住哪儿研究所',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160',
+  },
+]
+
+const guideFeedMeta = {
+  'first-time-xinjiang': {
+    primaryTab: '发现',
+    cityTab: '同城',
+    subCategory: '推荐',
+    contentType: '图文',
+    likesCount: 318,
+    saveCount: 126,
+    commentCount: 42,
+    coverAspectRatio: 1.28,
+    badgeCount: 3,
+    locationTag: '乌鲁木齐出发',
+  },
+  'self-drive-checklist': {
+    primaryTab: '发现',
+    cityTab: '同城',
+    subCategory: '自驾',
+    contentType: '视频',
+    likesCount: 246,
+    saveCount: 108,
+    commentCount: 30,
+    coverAspectRatio: 1.55,
+    badgeCount: 8,
+    locationTag: '独库热议',
+  },
+  'food-guide': {
+    primaryTab: '发现',
+    cityTab: '同城',
+    subCategory: '美食',
+    contentType: '图文',
+    likesCount: 402,
+    saveCount: 176,
+    commentCount: 58,
+    coverAspectRatio: 1.38,
+    badgeCount: 12,
+    locationTag: '喀什夜市',
+  },
+  'desert-safety': {
+    primaryTab: '发现',
+    cityTab: '同城',
+    subCategory: '安全',
+    contentType: '视频',
+    likesCount: 228,
+    saveCount: 96,
+    commentCount: 27,
+    coverAspectRatio: 1.62,
+    badgeCount: 5,
+    locationTag: '吐鲁番提醒',
+  },
+  'tianshan-hiking': {
+    primaryTab: '关注',
+    cityTab: '同城',
+    subCategory: '徒步',
+    contentType: '图文',
+    likesCount: 173,
+    saveCount: 89,
+    commentCount: 21,
+    coverAspectRatio: 1.48,
+    badgeCount: 2,
+    locationTag: '天山装备',
+  },
+  'stay-where': {
+    primaryTab: '发现',
+    cityTab: '同城',
+    subCategory: '住宿',
+    contentType: '图文',
+    likesCount: 201,
+    saveCount: 92,
+    commentCount: 18,
+    coverAspectRatio: 1.7,
+    badgeCount: 6,
+    locationTag: '旺季订房',
+  },
+}
+
+function enrichGuide(item, index) {
+  const author = guideAuthors[index % guideAuthors.length]
+  const feedMeta = guideFeedMeta[item.id] || {}
+
+  return {
+    ...item,
+    nickname: author.nickname,
+    authorAvatar: author.avatar,
+    primaryTab: feedMeta.primaryTab || '发现',
+    cityTab: feedMeta.cityTab || '同城',
+    subCategory: feedMeta.subCategory || '推荐',
+    contentType: feedMeta.contentType || '图文',
+    likesCount: feedMeta.likesCount || Number.parseInt(item.likes, 10) || 0,
+    saveCount: feedMeta.saveCount || 0,
+    commentCount: feedMeta.commentCount || 0,
+    coverAspectRatio: feedMeta.coverAspectRatio || 1.45,
+    badgeCount: feedMeta.badgeCount || 0,
+    locationTag: feedMeta.locationTag || item.location,
+  }
+}
+
 export function getGuideList() {
-  return guideList
+  return guideList.map((item, index) => enrichGuide(item, index))
 }
 
 export function getGuideById(id) {
-  return guideList.find((item) => item.id === id)
+  const index = guideList.findIndex((item) => item.id === id)
+  if (index === -1) {
+    return null
+  }
+
+  return enrichGuide(guideList[index], index)
 }

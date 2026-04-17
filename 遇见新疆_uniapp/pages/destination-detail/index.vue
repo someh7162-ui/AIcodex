@@ -117,6 +117,67 @@
       </view>
 
       <view class="section section-block">
+        <text class="section-title">安全保障</text>
+        <view class="safety-card card">
+          <view class="safety-head">
+            <view>
+              <text class="map-title">离线地图与应急提醒</text>
+              <text class="map-subtitle muted-text">进入山区、峡谷或高原前，建议先把景区离线地图下载到本地，弱网时也能快速查看位置参考。</text>
+            </view>
+            <view class="offline-status" :class="{ ready: hasOfflineMap }">{{ offlineMapStatusText }}</view>
+          </view>
+
+          <view class="offline-meta-grid">
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">覆盖范围</text>
+              <text class="travel-meta-value">{{ destinationSafetyMap.coverage }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">安全等级</text>
+              <text class="travel-meta-value">{{ destinationSafetyMap.emergencyLevel }}</text>
+            </view>
+          </view>
+
+          <view class="safety-map-preview">
+            <CachedImage :src="safetyMapImageUrl" image-class="cover-image" />
+            <view class="safety-map-badge">景区核心安全参考图</view>
+          </view>
+
+          <view class="offline-meta-grid compact-grid">
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">离线资源</text>
+              <text class="travel-meta-value">{{ offlineMapSupportText }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">本地状态</text>
+              <text class="travel-meta-value">{{ offlineMapLocalText }}</text>
+            </view>
+          </view>
+
+          <view class="safety-legend card-lite">
+            <text class="safety-item-title">安全图重点</text>
+            <text class="safety-item-desc muted-text">{{ destinationSafetyMap.highlights.join('；') }}</text>
+          </view>
+
+          <view class="safety-list">
+            <view v-for="item in safetyTips" :key="item.title" class="safety-item card-lite">
+              <text class="safety-item-title">{{ item.title }}</text>
+              <text class="safety-item-desc muted-text">{{ item.desc }}</text>
+            </view>
+          </view>
+
+          <view class="map-actions safety-actions">
+            <view class="primary-btn" @tap="openSafetyMapPage">查看完整安全图</view>
+            <view class="primary-btn" :class="{ disabled: offlineMapBusy || !offlineMapAvailable }" @tap="handleOfflineMapDownload">
+              {{ offlineMapButtonText }}
+            </view>
+            <view class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="openOfflineMap">打开离线安全图</view>
+            <view class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="deleteOfflineMapWithConfirm">删除离线地图</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section section-block">
         <text class="section-title">当地天气</text>
         <view class="weather-card card">
           <view class="weather-main">
@@ -199,9 +260,10 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
-import { getDestinationById, getDestinationCulture, getDestinationTravelMeta, getDestinationVisitMeta, getDouyinSearchUrl } from '../../common/destination-data'
+import { getDestinationById, getDestinationCulture, getDestinationSafetyMap, getDestinationTravelMeta, getDestinationVisitMeta, getDouyinSearchUrl } from '../../common/destination-data'
+import { deleteOfflineMap, downloadOfflineMap, getOfflineMapRecord } from '../../common/offline-map'
 import { getCurrentLocation, getDrivingRoute, getLiveWeather, getStaticMapUrl, getWalkingRoute, reverseGeocode } from '../../services/amap'
 import { hasAmapKey } from '../../config/amap'
 
@@ -227,6 +289,20 @@ const destinationVisitMeta = computed(() => getDestinationVisitMeta(currentId.va
   ticket: '',
   openHours: '',
 })
+const destinationSafetyMap = computed(() => getDestinationSafetyMap(currentId.value) || {
+  title: '景区安全图',
+  zoom: 14,
+  coverage: '主入口与核心游线',
+  emergencyLevel: '中',
+  terrainRisk: '',
+  weatherRisk: '',
+  signalRisk: '',
+  safeRoute: [],
+  servicePoints: [],
+  emergencyContacts: [],
+  highlights: [],
+  note: '',
+})
 
 const locationReady = ref(false)
 const locationStatusText = ref('未定位')
@@ -234,6 +310,8 @@ const routeMode = ref('driving')
 const routeData = ref(null)
 const liveWeatherData = ref(null)
 const weatherError = ref('')
+const offlineMapRecord = ref(null)
+const offlineMapBusy = ref(false)
 
 const liveWeather = computed(() => {
   if (liveWeatherData.value) {
@@ -308,9 +386,122 @@ const mapImageUrl = computed(() => {
   })
 })
 
+const safetyMapImageUrl = computed(() => {
+  const coords = destination.value?.coordinates
+  if (!coords) {
+    return ''
+  }
+
+  return getStaticMapUrl({
+    longitude: coords.longitude,
+    latitude: coords.latitude,
+    zoom: destinationSafetyMap.value.zoom,
+    size: '900*540',
+    markers: [
+      { longitude: coords.longitude, latitude: coords.latitude, label: '景', size: 'large' },
+    ],
+  })
+})
+
+const offlineMapVersion = computed(() => `map-${currentId.value || 'default'}-v2`)
+
+const offlineMapAvailable = computed(() => Boolean(safetyMapImageUrl.value))
+
+const hasOfflineMap = computed(() => Boolean(offlineMapRecord.value?.savedFilePath))
+
+const hasOfflineMapUpdate = computed(() => {
+  if (!hasOfflineMap.value || !offlineMapAvailable.value) {
+    return false
+  }
+
+  return offlineMapRecord.value?.sourceUrl !== safetyMapImageUrl.value || offlineMapRecord.value?.version !== offlineMapVersion.value
+})
+
+const offlineMapStatusText = computed(() => {
+  if (offlineMapBusy.value) {
+    return '下载中'
+  }
+
+  if (hasOfflineMapUpdate.value) {
+    return '可更新'
+  }
+
+  if (hasOfflineMap.value) {
+    return '已下载'
+  }
+
+  return offlineMapAvailable.value ? '未下载' : '暂未提供'
+})
+
+const offlineMapSupportText = computed(() => {
+  return offlineMapAvailable.value ? '支持下载景区级离线安全图' : '当前景区暂未生成离线地图资源'
+})
+
+const offlineMapLocalText = computed(() => {
+  if (!hasOfflineMap.value) {
+    return '本地暂无离线文件'
+  }
+
+  const timeText = formatDateTime(offlineMapRecord.value?.downloadedAt)
+  return timeText ? `已保存，下载于 ${timeText}` : '已保存到本地'
+})
+
+const offlineMapButtonText = computed(() => {
+  if (offlineMapBusy.value) {
+    return '下载中...'
+  }
+
+  if (hasOfflineMapUpdate.value) {
+    return '更新离线地图'
+  }
+
+  if (hasOfflineMap.value) {
+    return '重新下载离线地图'
+  }
+
+  return '下载离线地图'
+})
+
+const safetyTips = computed(() => {
+  if (!destination.value) {
+    return []
+  }
+
+  const tips = [
+    {
+      title: '弱网先备份',
+      desc: `出发前先下载 ${destination.value.name} 景区级离线安全图，优先保存主入口、返程口和游客中心位置。`,
+    },
+    {
+      title: '地形风险',
+      desc: destinationSafetyMap.value.terrainRisk,
+    },
+    {
+      title: '天气提醒',
+      desc: destinationSafetyMap.value.weatherRisk,
+    },
+    {
+      title: '信号提示',
+      desc: destinationSafetyMap.value.signalRisk,
+    },
+  ]
+
+  tips.push({
+    title: '应急联络',
+    desc: `建议优先联系 ${destinationSafetyMap.value.emergencyContacts.join('、')}。`,
+  })
+
+  return tips
+})
+
 onLoad(async (options) => {
   currentId.value = options?.id || ''
+  syncOfflineMapState()
   await refreshLocationAndWeather()
+})
+
+onShow(() => {
+  syncOfflineMapState()
 })
 
 async function refreshLocationAndWeather() {
@@ -429,6 +620,91 @@ function goBack() {
     return
   }
   uni.reLaunch({ url: '/pages/home/index' })
+}
+
+function syncOfflineMapState() {
+  if (!currentId.value) {
+    offlineMapRecord.value = null
+    return
+  }
+
+  offlineMapRecord.value = getOfflineMapRecord(currentId.value)
+}
+
+async function handleOfflineMapDownload() {
+  if (offlineMapBusy.value || !destination.value || !offlineMapAvailable.value) {
+    return
+  }
+
+  offlineMapBusy.value = true
+
+  try {
+    await downloadOfflineMap({
+      destinationId: currentId.value,
+      scenicName: destination.value.name,
+      mapUrl: safetyMapImageUrl.value,
+      version: offlineMapVersion.value,
+      metadata: destinationSafetyMap.value,
+    })
+
+    syncOfflineMapState()
+
+    uni.showToast({
+      title: '离线地图已保存',
+      icon: 'none',
+    })
+  } catch (error) {
+    uni.showModal({
+      title: '下载失败',
+      content: error.message || '离线地图下载失败，请稍后再试。',
+      showCancel: false,
+    })
+  } finally {
+    offlineMapBusy.value = false
+  }
+}
+
+function openOfflineMap() {
+  if (!hasOfflineMap.value) {
+    return
+  }
+
+  uni.navigateTo({
+    url: `/pages/safety-map/index?id=${encodeURIComponent(currentId.value)}&offline=1`,
+  })
+}
+
+function openSafetyMapPage() {
+  if (!destination.value) {
+    return
+  }
+
+  uni.navigateTo({
+    url: `/pages/safety-map/index?id=${encodeURIComponent(currentId.value)}`,
+  })
+}
+
+function deleteOfflineMapWithConfirm() {
+  if (!hasOfflineMap.value) {
+    return
+  }
+
+  uni.showModal({
+    title: '删除离线地图',
+    content: '确认删除当前景区已下载的离线地图吗？删除后需要重新下载。',
+    success: async ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+
+      await deleteOfflineMap(currentId.value)
+      syncOfflineMapState()
+      uni.showToast({
+        title: '已删除离线地图',
+        icon: 'none',
+      })
+    },
+  })
 }
 
 function openDouyinSearch() {
@@ -551,6 +827,25 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
   ]
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&')
+}
+
+function formatDateTime(timestamp) {
+  if (!timestamp) {
+    return ''
+  }
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 </script>
 
@@ -712,7 +1007,8 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
 }
 
 .map-card,
-.weather-card {
+.weather-card,
+.safety-card {
   margin-top: 24rpx;
   padding: 28rpx;
 }
@@ -758,6 +1054,19 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
 }
 
 .map-status.ready {
+  background: rgba(196, 69, 54, 0.12);
+  color: $theme-color;
+}
+
+.offline-status {
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(139, 111, 71, 0.12);
+  color: $theme-muted;
+  flex-shrink: 0;
+}
+
+.offline-status.ready {
   background: rgba(196, 69, 54, 0.12);
   color: $theme-color;
 }
@@ -862,6 +1171,108 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16rpx;
+}
+
+.safety-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22rpx;
+}
+
+.offline-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.safety-list {
+  margin-top: 22rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.safety-map-preview {
+  position: relative;
+  margin-top: 22rpx;
+  height: 360rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+}
+
+.safety-map-badge {
+  position: absolute;
+  left: 18rpx;
+  bottom: 18rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.52);
+  color: #ffffff;
+  font-size: 22rpx;
+}
+
+.compact-grid {
+  margin-top: 16rpx;
+}
+
+.safety-legend {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.12);
+}
+
+.safety-map-preview {
+  position: relative;
+  margin-top: 22rpx;
+  height: 360rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+}
+
+.safety-map-badge {
+  position: absolute;
+  left: 18rpx;
+  bottom: 18rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.52);
+  color: #ffffff;
+  font-size: 22rpx;
+}
+
+.compact-grid {
+  margin-top: 16rpx;
+}
+
+.safety-legend {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.12);
+}
+
+.safety-item {
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.12);
+}
+
+.safety-item-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.safety-item-desc {
+  margin-top: 10rpx;
+}
+
+.safety-actions {
+  grid-template-columns: 1fr;
 }
 
 .live-actions.one-col {
@@ -1012,11 +1423,22 @@ function buildAiAssistantParams(item, prompt, autoAsk) {
   color: $theme-text;
 }
 
+.primary-btn.disabled,
+.secondary-btn.disabled {
+  opacity: 0.5;
+}
+
 .empty-shell {
   padding-top: 120rpx;
 }
 
 .narrow-btn {
   margin-top: 28rpx;
+}
+
+@media screen and (max-width: 720rpx) {
+  .offline-meta-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

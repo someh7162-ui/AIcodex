@@ -57,6 +57,13 @@ async function resolveImage(url) {
 
   loading.value = true
 
+  // 本地路径直接使用，不走下载缓存
+  if (!/^https?:\/\//.test(url)) {
+    currentSrc.value = url
+    loading.value = false
+    return
+  }
+
   const key = storageKey(url)
   const cachedPath = uni.getStorageSync(key)
 

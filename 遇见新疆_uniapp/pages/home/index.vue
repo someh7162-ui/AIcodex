@@ -10,7 +10,10 @@
             <text class="hero-badge-dot"></text>
             <text class="hero-badge-text">{{ destinationList.length }} 个精选景区</text>
           </view>
-          <view class="hero-ai-btn" @tap="openAiPlanner">问 AI 规划新疆行程</view>
+          <view class="hero-action-row">
+            <view class="hero-ai-btn" @tap="openAiPlanner">问 AI 规划新疆行程</view>
+            <view class="hero-hiking-btn" @tap="openHikingMode">进入徒步模式</view>
+          </view>
         </view>
       </view>
 
@@ -69,9 +72,10 @@
       <view class="section section-block last-block">
         <text class="section-title">热门玩法</text>
         <view class="activity-grid">
-          <view v-for="item in activities" :key="item.title" class="activity-card">
+          <view v-for="item in activities" :key="item.title" class="activity-card" @tap="handleActivityTap(item)">
             <view class="activity-icon">{{ item.short }}</view>
             <text class="activity-title">{{ item.title }}</text>
+            <text class="activity-desc">{{ item.desc }}</text>
           </view>
         </view>
       </view>
@@ -124,8 +128,9 @@ const nicheDestinationIds = [63, 64, 65, 66, 67]
 const nicheDestinations = computed(() => destinationList.filter((item) => nicheDestinationIds.includes(item.id)))
 
 const activities = [
-  { short: '丝', title: '丝路人文漫游' },
-  { short: '沙', title: '沙漠越野探险' },
+  { short: '丝', title: '丝路人文漫游', desc: '适合第一次探索新疆的人文路线' },
+  { short: '沙', title: '沙漠越野探险', desc: '更偏向穿越和公路风景体验' },
+  { short: '徒', title: '徒步模式', desc: '定位、离线地图、SOS 与露营风险提示', action: 'hiking' },
 ]
 
 onLoad(async () => {
@@ -164,6 +169,22 @@ function openAiPlanner() {
     prompt: '我是第一次来新疆，请根据热门景区帮我规划 5 天行程。',
     context,
     autoAsk: true,
+  })
+}
+
+function openHikingMode() {
+  uni.navigateTo({ url: '/pages/hiking/index' })
+}
+
+function handleActivityTap(item) {
+  if (item.action === 'hiking') {
+    openHikingMode()
+    return
+  }
+
+  uni.showToast({
+    title: `${item.title} 敬请期待`,
+    icon: 'none',
   })
 }
 
@@ -287,7 +308,6 @@ function formatDistance(distanceKm) {
 }
 
 .hero-ai-btn {
-  margin-top: 26rpx;
   min-width: 320rpx;
   height: 84rpx;
   padding: 0 34rpx;
@@ -299,7 +319,32 @@ function formatDistance(distanceKm) {
   justify-content: center;
   font-size: 26rpx;
   font-weight: 600;
- }
+}
+
+.hero-action-row {
+  margin-top: 26rpx;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 18rpx;
+}
+
+.hero-hiking-btn {
+  min-width: 300rpx;
+  height: 84rpx;
+  padding: 0 34rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.38);
+  background: rgba(25, 23, 20, 0.18);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+}
 
 .stats-panel {
   margin-top: -54rpx;
@@ -497,7 +542,7 @@ function formatDistance(distanceKm) {
 .activity-grid {
   margin-top: 24rpx;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20rpx;
 }
 
@@ -507,6 +552,7 @@ function formatDistance(distanceKm) {
   text-align: center;
   background: rgba(232, 168, 124, 0.18);
   border: 2rpx solid rgba(232, 168, 124, 0.4);
+  min-height: 214rpx;
 }
 
 .activity-icon {
@@ -525,5 +571,19 @@ function formatDistance(distanceKm) {
 
 .activity-title {
   font-size: 24rpx;
+}
+
+.activity-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 21rpx;
+  line-height: 1.6;
+  color: $theme-muted;
+}
+
+@media screen and (max-width: 720rpx) {
+  .activity-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

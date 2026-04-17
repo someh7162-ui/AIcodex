@@ -81,9 +81,15 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import CachedImage from '../../components/CachedImage.vue'
-import { destinationList, scenicCategories, scenicRegions } from '../../common/destination-data'
+import {
+  getDestinationCategories,
+  getDestinationFeed,
+  getDestinationRegions,
+  getLocalDestinationList,
+} from '../../services/destinations'
 
 const searchQuery = ref('')
 const currentCategory = ref('全部')
@@ -92,46 +98,60 @@ const categoriesExpanded = ref(false)
 const regionsExpanded = ref(false)
 const defaultVisibleCount = 5
 
-const categories = scenicCategories
-const regions = scenicRegions
+const destinations = ref(getLocalDestinationList())
+
+const categories = computed(() => getDestinationCategories(destinations.value))
+const regions = computed(() => getDestinationRegions(destinations.value))
 
 const visibleCategories = computed(() => {
-  if (categoriesExpanded.value || categories.length <= defaultVisibleCount) {
-    return categories
+  const list = categories.value
+  if (categoriesExpanded.value || list.length <= defaultVisibleCount) {
+    return list
   }
 
-  const compact = categories.slice(0, defaultVisibleCount)
+  const compact = list.slice(0, defaultVisibleCount)
   if (compact.includes(currentCategory.value)) {
     return compact
   }
 
-  return [categories[0], currentCategory.value, ...categories.slice(1, defaultVisibleCount - 1)]
+  return [list[0], currentCategory.value, ...list.slice(1, defaultVisibleCount - 1)]
 })
 
 const visibleRegions = computed(() => {
-  if (regionsExpanded.value || regions.length <= defaultVisibleCount) {
-    return regions
+  const list = regions.value
+  if (regionsExpanded.value || list.length <= defaultVisibleCount) {
+    return list
   }
 
-  const compact = regions.slice(0, defaultVisibleCount)
+  const compact = list.slice(0, defaultVisibleCount)
   if (compact.includes(currentRegion.value)) {
     return compact
   }
 
-  return [regions[0], currentRegion.value, ...regions.slice(1, defaultVisibleCount - 1)]
+  return [list[0], currentRegion.value, ...list.slice(1, defaultVisibleCount - 1)]
 })
-
-const destinations = destinationList
 
 const filteredDestinations = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
-  return destinations.filter((item) => {
+  return destinations.value.filter((item) => {
     const matchesCategory = currentCategory.value === '全部' || item.category === currentCategory.value
     const matchesRegion = currentRegion.value === '全部' || item.region === currentRegion.value
     const searchText = [item.name, item.location, item.region, item.category].join(' ').toLowerCase()
     const matchesSearch = !query || searchText.includes(query)
     return matchesCategory && matchesRegion && matchesSearch
   })
+})
+
+onShow(async () => {
+  destinations.value = await getDestinationFeed()
+
+  if (!categories.value.includes(currentCategory.value)) {
+    currentCategory.value = '全部'
+  }
+
+  if (!regions.value.includes(currentRegion.value)) {
+    currentRegion.value = '全部'
+  }
 })
 
 function openDetail(id) {
