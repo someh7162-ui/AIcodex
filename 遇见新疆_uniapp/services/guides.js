@@ -1,7 +1,8 @@
 import { getGuideById, getGuideList } from '../common/guide-data'
+import { requestJson } from '../common/app-http'
 import { addPublishedGuide, getPublishedGuideById, getPublishedGuides, persistGuideImages, persistLocalFile } from '../common/published-guides'
 import { getStoredAuthToken, getStoredAuthUser } from '../common/auth-storage'
-import { API_BASE_URL, hasApiBaseUrl } from '../config/api'
+import { API_BASE_URL, hasApiBaseUrl, normalizeApiAssetUrl } from '../config/api'
 
 const GUIDE_API_BASE = API_BASE_URL
 
@@ -20,16 +21,19 @@ function buildUrl(path, params = {}) {
 
 function request(method, path, data, token = getStoredAuthToken()) {
   return new Promise((resolve, reject) => {
-    uni.request({
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+
+    requestJson({
       url: buildUrl(path, method === 'GET' ? data : undefined),
       method,
       timeout: 20000,
-      header: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers,
+      header: headers,
       data: method === 'GET' ? undefined : data,
-      success: (res) => {
+    }).then((res) => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           const error = new Error(res.data?.message || `HTTP ${res.statusCode}`)
           error.statusCode = res.statusCode
@@ -37,12 +41,25 @@ function request(method, path, data, token = getStoredAuthToken()) {
           return
         }
         resolve(res.data || {})
-      },
-      fail: () => {
-        reject(new Error('无法连接攻略服务，请检查服务器地址或网络。'))
-      },
-    })
+      }).catch((error) => {
+        reject(new Error(error?.message || '无法连接攻略服务，请检查服务器地址或网络。'))
+      })
   })
+}
+
+function normalizeGuideEntity(item) {
+  if (!item || typeof item !== 'object') {
+    return item
+  }
+
+  return {
+    ...item,
+    image: normalizeApiAssetUrl(item.image),
+    images: Array.isArray(item.images) ? item.images.map(normalizeApiAssetUrl).filter(Boolean) : [],
+    authorAvatar: normalizeApiAssetUrl(item.authorAvatar),
+    video: normalizeApiAssetUrl(item.video),
+    videoPoster: normalizeApiAssetUrl(item.videoPoster),
+  }
 }
 
 export function uploadGuideMedia(filePath, mediaType = 'image', token = getStoredAuthToken()) {
@@ -86,7 +103,7 @@ export function uploadGuideMedia(filePath, mediaType = 'image', token = getStore
 export async function createGuide(payload, token = getStoredAuthToken()) {
   if (hasGuideApi()) {
     const data = await request('POST', '/guides', payload, token)
-    return data?.data || null
+    return normalizeGuideEntity(data?.data || null)
   }
 
   const savedImages = await persistGuideImages(payload.images)
@@ -113,7 +130,7 @@ export async function getGuideFeed(params = {}) {
   }
 
   const data = await request('GET', '/guides', params)
-  return Array.isArray(data?.list) ? data.list : []
+  return Array.isArray(data?.list) ? data.list.map(normalizeGuideEntity) : []
 }
 
 export async function getGuideDetail(id) {
@@ -122,18 +139,30 @@ export async function getGuideDetail(id) {
   }
 
   const data = await request('GET', `/guides/${encodeURIComponent(id)}`)
-  return data?.data || null
+  return normalizeGuideEntity(data?.data || null)
 }
 
 export async function getGuideComments(slug) {
   if (!hasGuideApi()) return []
   const data = await request('GET', `/guides/${encodeURIComponent(slug)}/comments`)
-  return data?.list || []
+  return Array.isArray(data?.list)
+    ? data.list.map((item) => ({
+      ...item,
+      avatarUrl: normalizeApiAssetUrl(item.avatarUrl),
+      authorAvatar: normalizeApiAssetUrl(item.authorAvatar),
+    }))
+    : []
 }
 
 export async function postGuideComment(slug, content, token) {
   const data = await request('POST', `/guides/${encodeURIComponent(slug)}/comments`, { content }, token)
-  return data?.comment || null
+  return data?.comment
+    ? {
+      ...data.comment,
+      avatarUrl: normalizeApiAssetUrl(data.comment.avatarUrl),
+      authorAvatar: normalizeApiAssetUrl(data.comment.authorAvatar),
+    }
+    : null
 }
 
 export async function deleteGuideComment(slug, commentId, token) {

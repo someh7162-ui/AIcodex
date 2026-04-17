@@ -55,6 +55,7 @@ import {
   normalizeLocation,
   sumTrackDistanceKm,
 } from '../../common/hiking-metrics'
+import { openAppPermissionSettings } from '../../services/amap'
 import { createHikingNativeBridge, DEFAULT_MAP_PROVIDER } from '../../services/hiking-native'
 
 const TRACKING_INTERVAL = 8000
@@ -79,6 +80,7 @@ const offlineMapStatus = ref(null)
 const debugLogs = ref([])
 let pollTimer = null
 let stopStandardEvents = null
+let hasPromptedLocationSettings = false
 
 const mapCenter = computed(() => {
   if (!currentLocation.value) {
@@ -241,6 +243,7 @@ async function refreshLocation() {
   } catch (error) {
     locationError.value = error?.message || '定位失败'
     appendDebugLog(`定位失败: ${locationError.value}`)
+    maybePromptLocationSettings(locationError.value)
   }
 }
 
@@ -359,6 +362,29 @@ function cleanup() {
 function appendDebugLog(message) {
   const stamp = new Date().toTimeString().slice(0, 8)
   debugLogs.value = [`${stamp} ${message}`, ...debugLogs.value].slice(0, 4)
+}
+
+function maybePromptLocationSettings(message) {
+  if (hasPromptedLocationSettings || !/定位权限未开启/.test(String(message || ''))) {
+    return
+  }
+
+  hasPromptedLocationSettings = true
+  uni.showModal({
+    title: '需要定位权限',
+    content: '徒步页面需要定位权限才能记录轨迹。是否现在前往系统设置开启？',
+    confirmText: '去开启',
+    cancelText: '稍后',
+    success: ({ confirm }) => {
+      if (confirm && !openAppPermissionSettings()) {
+        uni.showToast({
+          title: '请在系统设置中手动开启定位权限',
+          icon: 'none',
+          duration: 2500,
+        })
+      }
+    },
+  })
 }
 
 function formatLocationDebug(location) {

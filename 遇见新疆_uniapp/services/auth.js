@@ -1,4 +1,5 @@
 import { AUTH_API_BASE_URL, hasAuthApiBaseUrl } from '../config/auth'
+import { requestJson } from '../common/app-http'
 
 function request(path, data) {
   return new Promise((resolve, reject) => {
@@ -7,26 +8,27 @@ function request(path, data) {
       return
     }
 
-    uni.request({
+    requestJson({
       url: `${AUTH_API_BASE_URL}${path}`,
       method: 'POST',
       timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
       header: {
         'Content-Type': 'application/json',
       },
       data,
-      success: (res) => {
+    }).then((res) => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           reject(new Error(res.data?.message || `请求失败(${res.statusCode})`))
           return
         }
 
         resolve(res.data || {})
-      },
-      fail: () => {
-        reject(new Error('无法连接认证服务，请检查服务器地址或网络。'))
-      },
-    })
+      }).catch((error) => {
+        reject(new Error(error?.message || '无法连接认证服务，请检查服务器地址或网络。'))
+      })
   })
 }
 
@@ -44,24 +46,24 @@ function authRequest(path, method, token, data) {
       reject(new Error('认证服务地址未配置'))
       return
     }
-    uni.request({
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+    requestJson({
       url: `${AUTH_API_BASE_URL}${path}`,
       method,
       timeout: 15000,
-      header: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers,
+      header: headers,
       data: method === 'GET' ? undefined : data,
-      success: (res) => {
+    }).then((res) => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           reject(new Error(res.data?.message || `请求失败(${res.statusCode})`))
           return
         }
         resolve(res.data || {})
-      },
-      fail: () => reject(new Error('无法连接服务器')),
-    })
+      }).catch((error) => reject(new Error(error?.message || '无法连接服务器')))
   })
 }
 

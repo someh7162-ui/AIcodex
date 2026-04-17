@@ -124,6 +124,7 @@ import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
 import { getMyFavoriteGuides, getMyGuides, getMyStats, updateUserProfile, uploadAvatar } from '../../services/auth'
+import { normalizeApiAssetUrl } from '../../config/api'
 
 const currentUser = ref(null)
 const authToken = ref('')
@@ -256,7 +257,7 @@ function chooseAvatar() {
       try {
         uni.showLoading({ title: '上传中...' })
         const res = await uploadAvatar(authToken.value, tempFilePaths[0])
-        const fullUrl = res.avatar_url.startsWith('http') ? res.avatar_url : `https://111.20.31.227:34144${res.avatar_url}`
+        const fullUrl = normalizeApiAssetUrl(res.avatar_url)
         const updated = { ...currentUser.value, avatar_url: fullUrl }
         saveAuthSession({ token: authToken.value, user: updated })
         currentUser.value = updated

@@ -98,7 +98,7 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <image class="author-avatar" :src="item.authorAvatar" mode="aspectFill"></image>
+                  <CachedImage :src="item.authorAvatar" container-class="author-avatar-shell" image-class="author-avatar" />
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.category }}</text>
@@ -140,7 +140,7 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <image class="author-avatar" :src="item.authorAvatar" mode="aspectFill"></image>
+                  <CachedImage :src="item.authorAvatar" container-class="author-avatar-shell" image-class="author-avatar" />
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.publishDate }}</text>
@@ -877,6 +877,13 @@ function isSameCityGuide(item) {
   border-radius: 50%;
   flex-shrink: 0;
   background: rgba(212, 165, 116, 0.2);
+}
+
+.author-avatar-shell {
+  width: 38rpx;
+  height: 38rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .author-name,

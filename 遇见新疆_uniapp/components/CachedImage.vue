@@ -17,6 +17,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { downloadRemoteFile } from '../common/app-http'
 
 const props = defineProps({
   src: {
@@ -82,9 +83,15 @@ async function resolveImage(url) {
   }
 
   try {
-    const downloadRes = await uni.downloadFile({ url })
+    const downloadRes = await downloadRemoteFile(url)
     if (downloadRes.statusCode !== 200 || !downloadRes.tempFilePath) {
       loading.value = false
+      return
+    }
+
+    if (typeof plus !== 'undefined' && downloadRes.tempFilePath.startsWith('_doc/')) {
+      uni.setStorageSync(key, downloadRes.tempFilePath)
+      currentSrc.value = downloadRes.tempFilePath
       return
     }
 
