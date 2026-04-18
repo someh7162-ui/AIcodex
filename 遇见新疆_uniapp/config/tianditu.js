@@ -1,5 +1,5 @@
 export const TIANDITU_PROVIDER = 'tianditu'
-export const TIANDITU_KEY = '4344d443d2d5974ce960da012322cbab'
+export const TIANDITU_KEY = '58f4f23a5a026d8bc9f289c7156b0b1a'
 export const DEFAULT_TERRAIN_REGION_ID = 'xj-tianshan-north'
 
 export function hasTiandituKey() {

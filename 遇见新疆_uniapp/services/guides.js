@@ -1,4 +1,4 @@
-import { getGuideById, getGuideList } from '../common/guide-data'
+import { normalizeGuideTrack } from '../common/guide-track'
 import { requestJson } from '../common/app-http'
 import { addPublishedGuide, getPublishedGuideById, getPublishedGuides, persistGuideImages, persistLocalFile } from '../common/published-guides'
 import { getStoredAuthToken, getStoredAuthUser } from '../common/auth-storage'
@@ -59,6 +59,7 @@ function normalizeGuideEntity(item) {
     authorAvatar: normalizeApiAssetUrl(item.authorAvatar),
     video: normalizeApiAssetUrl(item.video),
     videoPoster: normalizeApiAssetUrl(item.videoPoster),
+    hikingTrack: normalizeGuideTrack(item.hikingTrack),
   }
 }
 
@@ -126,7 +127,7 @@ export async function getGuideFeed(params = {}) {
   const publishedGuides = getPublishedGuides()
 
   if (!hasGuideApi()) {
-    return [...publishedGuides, ...getGuideList()]
+    return publishedGuides
   }
 
   const data = await request('GET', '/guides', params)
@@ -135,7 +136,7 @@ export async function getGuideFeed(params = {}) {
 
 export async function getGuideDetail(id) {
   if (!hasGuideApi()) {
-    return getPublishedGuideById(id) || getGuideById(id)
+    return getPublishedGuideById(id)
   }
 
   const data = await request('GET', `/guides/${encodeURIComponent(id)}`)

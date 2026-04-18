@@ -118,7 +118,7 @@ async function saveProfile() {
     const res = await updateUserProfile(authToken.value, { nickname })
     const merged = { ...currentUser.value, ...res.user, avatar_url: currentUser.value?.avatar_url || res.user?.avatar_url }
     saveAuthSession({ token: authToken.value, user: merged })
-    currentUser.value = res.user
+    currentUser.value = merged
     editModalVisible.value = false
     uni.showToast({ title: '昵称已更新', icon: 'success' })
   } catch (e) {

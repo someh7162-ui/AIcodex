@@ -1,3 +1,5 @@
+import { normalizeGuideTrack } from './guide-track'
+
 const PUBLISHED_GUIDES_STORAGE = 'meet-xinjiang-published-guides'
 
 const defaultCoverOptions = [
@@ -36,6 +38,7 @@ function normalizeGuide(item = {}, index = 0) {
   const contentType = deriveContentType(item, images)
   const previewImage = images[0] || item.videoPoster || item.image || ''
   const summaryText = item.excerpt || item.summary || ''
+  const hikingTrack = normalizeGuideTrack(item.hikingTrack)
 
   return {
     id: item.id,
@@ -70,6 +73,7 @@ function normalizeGuide(item = {}, index = 0) {
     videoPoster: item.videoPoster || '',
     summaryText,
     hasMedia: Boolean(previewImage || item.video),
+    hikingTrack,
     isUserPublished: true,
   }
 }

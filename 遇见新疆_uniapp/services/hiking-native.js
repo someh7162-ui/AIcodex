@@ -1,7 +1,7 @@
 import { getCurrentLocation } from './amap'
 
 const DEFAULT_PLUGIN_NAME = 'MeetXinjiangHikingMap'
-const DEFAULT_MAP_PROVIDER = 'tianditu'
+const DEFAULT_MAP_PROVIDER = 'amap'
 const STANDARD_EVENTS = ['onLocationChange', 'onTrackUpdate', 'onGpsWeak', 'onDeviationAlert', 'onNativeError', 'onOfflineMapReady']
 const ENABLE_HIKING_NATIVE_PLUGIN = false
 
@@ -113,7 +113,7 @@ export function createHikingNativeBridge(options = {}) {
       if (nativeLocation) {
         return nativeLocation
       }
-      return getCurrentLocation()
+      return getCurrentLocation(payload)
     },
     async moveToCurrentLocation() {
       return unwrapResult(await invoke(plugin, 'moveToCurrentLocation'))

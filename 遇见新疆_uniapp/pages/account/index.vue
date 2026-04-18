@@ -8,7 +8,7 @@
         </view>
         <view class="profile-row">
           <view class="avatar-wrap" @tap="isLoggedIn && chooseAvatar()">
-            <image v-if="avatarUrl" :src="avatarUrl" class="avatar-img" mode="aspectFill" />
+            <CachedImage v-if="avatarUrl" :src="avatarUrl" container-class="avatar-img" image-class="avatar-img" />
             <view v-else class="avatar">{{ profileInitial }}</view>
             <view v-if="isLoggedIn" class="avatar-edit-badge">编辑</view>
           </view>
@@ -49,7 +49,7 @@
         </view>
         <view v-else class="guide-list">
           <view v-for="g in myGuides" :key="g.id" class="card guide-item" @tap="goGuide(g.id)">
-            <image v-if="g.image" :src="g.image" class="guide-thumb" mode="aspectFill" />
+            <CachedImage v-if="g.image" :src="g.image" container-class="guide-thumb" image-class="guide-thumb" />
             <view class="guide-info">
               <text class="guide-title">{{ g.title }}</text>
               <text class="guide-meta muted-text">{{ g.category }} · {{ g.publishDate }}</text>
@@ -69,7 +69,7 @@
         </view>
         <view v-else class="guide-list">
           <view v-for="g in favoriteGuides" :key="g.id" class="card guide-item" @tap="goGuide(g.id)">
-            <image v-if="g.image" :src="g.image" class="guide-thumb" mode="aspectFill" />
+            <CachedImage v-if="g.image" :src="g.image" container-class="guide-thumb" image-class="guide-thumb" />
             <view class="guide-info">
               <text class="guide-title">{{ g.title }}</text>
               <text class="guide-meta muted-text">{{ g.nickname || g.author }} · {{ g.publishDate }}</text>
@@ -122,6 +122,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
+import CachedImage from '../../components/CachedImage.vue'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
 import { getMyFavoriteGuides, getMyGuides, getMyStats, updateUserProfile, uploadAvatar } from '../../services/auth'
 import { normalizeApiAssetUrl } from '../../config/api'

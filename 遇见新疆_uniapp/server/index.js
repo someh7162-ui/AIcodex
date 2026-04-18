@@ -168,17 +168,62 @@ function buildAssetUrl(req, assetPath = '') {
     return ''
   }
 
-  if (/^https?:\/\//i.test(normalizedPath)) {
-    return normalizedPath
-  }
-
   const forwardedProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim()
   const forwardedHost = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim()
   if (!forwardedHost) {
     return normalizedPath
   }
 
-  return `${forwardedProto}://${forwardedHost}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`
+  const runtimeOrigin = `${forwardedProto}://${forwardedHost}`
+  const legacyOrigins = [
+    'https://111.20.31.227:34144',
+    'http://111.20.31.227:34144',
+    'https://frp-arm.com:44637',
+    'http://frp-arm.com:44637',
+  ]
+
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    const legacyOrigin = legacyOrigins.find((origin) => normalizedPath.startsWith(origin))
+    return legacyOrigin ? `${runtimeOrigin}${normalizedPath.slice(legacyOrigin.length)}` : normalizedPath
+  }
+
+  return `${runtimeOrigin}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`
+}
+
+function normalizeStoredAssetPath(assetPath = '') {
+  const normalizedPath = String(assetPath || '').trim()
+  if (!normalizedPath) {
+    return ''
+  }
+
+  const legacyOrigins = [
+    'https://111.20.31.227:34144',
+    'http://111.20.31.227:34144',
+    'https://frp-arm.com:44637',
+    'http://frp-arm.com:44637',
+    'https://yd.frp-arm.com:44637',
+    'http://yd.frp-arm.com:44637',
+  ]
+
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    const matched = legacyOrigins.find((origin) => normalizedPath.startsWith(origin))
+    if (matched) {
+      const suffix = normalizedPath.slice(matched.length)
+      return suffix.startsWith('/') ? suffix : `/${suffix}`
+    }
+    return normalizedPath
+  }
+
+  if (/^(111\.20\.31\.227:34144|frp-arm\.com:44637|yd\.frp-arm\.com:44637)(\/|\?|$)/i.test(normalizedPath)) {
+    const [, suffix = ''] = normalizedPath.match(/^(?:111\.20\.31\.227:34144|frp-arm\.com:44637|yd\.frp-arm\.com:44637)(.*)$/i) || []
+    return suffix ? (suffix.startsWith('/') ? suffix : `/${suffix}`) : ''
+  }
+
+  return normalizedPath.startsWith('/') ? normalizedPath : normalizedPath
+}
+
+function normalizeStoredAssetArray(values = []) {
+  return values.map((item) => normalizeStoredAssetPath(item)).filter(Boolean)
 }
 
 function signToken(user) {
@@ -821,9 +866,9 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
   const title = normalizeText(req.body.title)
   const excerpt = normalizeText(req.body.excerpt)
   const summaryText = normalizeText(req.body.summaryText || req.body.summary || req.body.excerpt)
-  const images = normalizeTextArray(req.body.images, 9)
-  const video = normalizeText(req.body.video)
-  const videoPoster = normalizeText(req.body.videoPoster)
+  const images = normalizeStoredAssetArray(normalizeTextArray(req.body.images, 9))
+  const video = normalizeStoredAssetPath(normalizeText(req.body.video))
+  const videoPoster = normalizeStoredAssetPath(normalizeText(req.body.videoPoster))
   const highlights = normalizeTextArray(req.body.highlights, 8)
   const tips = normalizeTextArray(req.body.tips, 12)
   const contentType = deriveGuideContentType({ contentType: normalizeText(req.body.contentType), video, images })

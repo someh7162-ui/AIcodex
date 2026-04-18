@@ -18,6 +18,9 @@ export function normalizeLocation(location) {
     speed: Number(location.speed || 0),
     bearing: Number(location.bearing || location.heading || 0),
     timestamp: Number(location.timestamp || Date.now()),
+    provider: String(location.provider || location.sourceProvider || ''),
+    source: String(location.source || ''),
+    coordinateSystem: String(location.coordinateSystem || location.coordsType || ''),
   }
 }
 

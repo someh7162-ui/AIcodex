@@ -1,5 +1,35 @@
 import { AUTH_API_BASE_URL, hasAuthApiBaseUrl } from '../config/auth'
 import { requestJson } from '../common/app-http'
+import { normalizeApiAssetUrl } from '../config/api'
+
+function normalizeUser(user) {
+  if (!user || typeof user !== 'object') {
+    return user
+  }
+
+  return {
+    ...user,
+    avatar_url: normalizeApiAssetUrl(user.avatar_url),
+    avatar: normalizeApiAssetUrl(user.avatar),
+  }
+}
+
+function normalizeResponseData(data) {
+  if (!data || typeof data !== 'object') {
+    return data
+  }
+
+  return {
+    ...data,
+    user: normalizeUser(data.user),
+    data: data.data && typeof data.data === 'object'
+      ? {
+          ...data.data,
+          avatar_url: normalizeApiAssetUrl(data.data.avatar_url),
+        }
+      : data.data,
+  }
+}
 
 function request(path, data) {
   return new Promise((resolve, reject) => {
@@ -25,7 +55,7 @@ function request(path, data) {
           return
         }
 
-        resolve(res.data || {})
+        resolve(normalizeResponseData(res.data || {}))
       }).catch((error) => {
         reject(new Error(error?.message || '无法连接认证服务，请检查服务器地址或网络。'))
       })
@@ -62,7 +92,7 @@ function authRequest(path, method, token, data) {
           reject(new Error(res.data?.message || `请求失败(${res.statusCode})`))
           return
         }
-        resolve(res.data || {})
+        resolve(normalizeResponseData(res.data || {}))
       }).catch((error) => reject(new Error(error?.message || '无法连接服务器')))
   })
 }
@@ -78,7 +108,7 @@ export function uploadAvatar(token, filePath) {
       success: (res) => {
         const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
         if (res.statusCode < 200 || res.statusCode >= 300) { reject(new Error(data?.message || '上传失败')); return }
-        resolve(data)
+        resolve(normalizeResponseData(data))
       },
       fail: () => reject(new Error('上传失败，请检查网络')),
     })

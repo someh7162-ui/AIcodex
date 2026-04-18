@@ -5,7 +5,12 @@
       <view class="topbar">
         <view class="icon-btn" @tap="goBack">‹</view>
         <view class="author-strip">
-          <image class="author-avatar" :src="guide.authorAvatar" mode="aspectFill"></image>
+          <CachedImage
+            :src="guide.authorAvatar"
+            container-class="author-avatar-shell"
+            image-class="author-avatar"
+            style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
+          />
           <view class="author-copy">
             <text class="author-name">{{ guide.nickname || guide.author }}</text>
             <text class="author-meta" v-if="guide.authorFollowerCount || guide.authorFollowingCount">
@@ -73,6 +78,46 @@
         </view>
       </view>
 
+      <view v-if="guideTrack" class="track-section section">
+        <view class="track-section-head">
+          <view>
+            <text class="track-section-title">附带徒步轨迹</text>
+            <text class="track-section-subtitle">这条笔记同步了一段真实路线，可直接查看大致走向。</text>
+          </view>
+          <text class="track-section-badge">{{ guideTrack.pointCount }} 点</text>
+        </view>
+
+        <view class="track-stat-row">
+          <view class="track-stat-card">
+            <text class="track-stat-value">{{ guideTrackDistanceText }}</text>
+            <text class="track-stat-label">路线距离</text>
+          </view>
+          <view class="track-stat-card">
+            <text class="track-stat-value">{{ guideTrackDurationText }}</text>
+            <text class="track-stat-label">记录时长</text>
+          </view>
+          <view class="track-stat-card">
+            <text class="track-stat-value">{{ guideTrackAscentText }}</text>
+            <text class="track-stat-label">累计爬升</text>
+          </view>
+        </view>
+
+        <view class="track-map-shell">
+          <HikingTileMapCompat
+            :map-center="guideTrackCenter"
+            :map-scale="14"
+            :map-polyline="guideTrackPolyline"
+            :map-markers="guideTrackMarkers"
+            map-mode-key="satellite"
+          />
+        </view>
+
+        <view class="track-meta-row">
+          <text class="track-meta-label">终点坐标</text>
+          <text class="track-meta-value">{{ guideTrackCoordinateText }}</text>
+        </view>
+      </view>
+
       <view class="comment-head section">
         <view>
           <text class="comment-title">共 {{ formatCount(guide.commentCount) }} 条评论</text>
@@ -82,7 +127,12 @@
       </view>
 
       <view class="input-preview section" @tap="focusComment">
-        <image class="comment-avatar" :src="commentInputAvatar" mode="aspectFill"></image>
+        <CachedImage
+          :src="commentInputAvatar"
+          container-class="comment-avatar-shell"
+          image-class="comment-avatar"
+          style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
+        />
         <view class="fake-input">留下你的想法吧</view>
       </view>
 
@@ -97,7 +147,12 @@
 
       <view v-else-if="comments.length" class="comment-list section">
         <view v-for="c in comments" :key="c.id" class="comment-item">
-          <image class="comment-avatar" :src="c.avatarUrl || guide.authorAvatar" mode="aspectFill"></image>
+          <CachedImage
+            :src="commentAvatar(c)"
+            container-class="comment-avatar-shell"
+            image-class="comment-avatar"
+            style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
+          />
           <view class="comment-body-wrap">
             <view class="comment-row-top">
               <view class="comment-user-meta">
@@ -170,6 +225,9 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser } from '../../common/auth-storage'
+import { formatTrackDuration } from '../../common/guide-track'
+import { buildCurrentMarker, buildTrackPolyline, formatCoordinate } from '../../common/hiking-metrics'
+import HikingTileMapCompat from '../hiking/components/HikingTileMapCompat.vue'
 import { followUser, unfollowUser } from '../../services/auth'
 import {
   deleteGuideComment,
@@ -232,6 +290,18 @@ const commentSummary = computed(() => {
 
   return `已展示最新 ${comments.value.length} 条评论`
 })
+
+function commentAvatar(comment) {
+  if (comment?.avatarUrl) {
+    return comment.avatarUrl
+  }
+
+  if (comment?.authorId && currentUser.value?.id && comment.authorId === currentUser.value.id) {
+    return currentUser.value?.avatar_url || guide.value?.authorAvatar || ''
+  }
+
+  return guide.value?.authorAvatar || ''
+}
 const followButtonText = computed(() => {
   if (!guide.value?.authorId) {
     return '作者'
@@ -258,6 +328,27 @@ const detailTags = computed(() => {
     .map((item) => String(item).replace(/^#/, '').trim())
     .filter(Boolean)
     .slice(0, 4)
+})
+const guideTrack = computed(() => guide.value?.hikingTrack || null)
+const guideTrackCenter = computed(() => guideTrack.value?.endPoint || guideTrack.value?.startPoint || null)
+const guideTrackPolyline = computed(() => buildTrackPolyline(guideTrack.value?.points || []))
+const guideTrackMarkers = computed(() => buildCurrentMarker(guideTrackCenter.value, false))
+const guideTrackDistanceText = computed(() => {
+  const distanceKm = Number(guideTrack.value?.distanceKm || 0)
+  return distanceKm > 0 ? `${distanceKm.toFixed(2)} km` : '--'
+})
+const guideTrackDurationText = computed(() => formatTrackDuration(guideTrack.value?.durationMs || 0))
+const guideTrackAscentText = computed(() => {
+  const ascent = Number(guideTrack.value?.altitudeGain || 0)
+  return ascent > 0 ? `${Math.round(ascent)} m` : '--'
+})
+const guideTrackCoordinateText = computed(() => {
+  const point = guideTrackCenter.value
+  if (!point) {
+    return '--'
+  }
+
+  return `${formatCoordinate(point.latitude, 'lat')} / ${formatCoordinate(point.longitude, 'lng')}`
 })
 
 const searchHint = computed(() => {
@@ -677,6 +768,14 @@ function formatCommentTime(value) {
   background: rgba(212, 165, 116, 0.18);
 }
 
+.author-avatar-shell,
+.comment-avatar-shell {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .author-name,
 .comment-name {
   font-size: 32rpx;
@@ -879,6 +978,99 @@ function formatCommentTime(value) {
 .meta-text {
   font-size: 24rpx;
   color: $theme-muted;
+}
+
+.track-section {
+  margin-top: 28rpx;
+  padding: 30rpx;
+  border-radius: 30rpx;
+  background: linear-gradient(180deg, #fffaf4 0%, #fffdf9 100%);
+  border: 2rpx solid rgba(223, 92, 70, 0.08);
+}
+
+.track-section-head,
+.track-meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.track-section-title,
+.track-stat-value,
+.track-meta-label,
+.track-meta-value {
+  display: block;
+  color: $theme-text;
+}
+
+.track-section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.track-section-subtitle,
+.track-stat-label,
+.track-meta-label {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: $theme-muted;
+}
+
+.track-section-badge {
+  flex-shrink: 0;
+  height: 52rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  background: #fff1ec;
+  color: #df5c46;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.track-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 24rpx;
+}
+
+.track-stat-card {
+  min-width: 0;
+  padding: 22rpx 18rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.92);
+  border: 2rpx solid rgba(15, 23, 42, 0.04);
+}
+
+.track-stat-value {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.track-map-shell {
+  margin-top: 22rpx;
+  height: 420rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+  background: #0b0d10;
+}
+
+.track-meta-row {
+  margin-top: 18rpx;
+  align-items: center;
+}
+
+.track-meta-value {
+  flex: 1;
+  text-align: right;
+  font-size: 22rpx;
+  line-height: 1.6;
 }
 
 .ghost-action {
@@ -1315,6 +1507,19 @@ function formatCommentTime(value) {
 
   .action-icons {
     justify-content: space-around;
+  }
+
+  .track-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .track-meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .track-meta-value {
+    text-align: left;
   }
 }
 </style>

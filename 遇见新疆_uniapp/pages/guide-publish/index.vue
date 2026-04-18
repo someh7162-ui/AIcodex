@@ -13,7 +13,13 @@
     <scroll-view class="page-body" scroll-y>
       <view class="composer-card">
         <view class="composer-head">
-          <image class="composer-avatar" :src="authorAvatar" mode="aspectFill"></image>
+          <CachedImage
+            v-if="authorAvatarUrl"
+            :src="authorAvatarUrl"
+            container-class="composer-avatar"
+            image-class="composer-avatar"
+          />
+          <view v-else class="composer-avatar composer-avatar-fallback">{{ authorInitial }}</view>
           <view class="composer-user-copy">
             <text class="composer-name">{{ currentUser?.nickname || '新疆旅行者' }}</text>
             <text class="composer-subline">分享一条会被收藏的新疆笔记</text>
@@ -90,14 +96,14 @@
         </view>
 
         <view v-if="publishForm.videoPoster" class="video-card">
-          <image class="video-poster" :src="publishForm.videoPoster" mode="aspectFill"></image>
+          <CachedImage :src="publishForm.videoPoster" container-class="video-poster" image-class="video-poster" :fallback-to-remote="false" />
           <view class="video-overlay">视频</view>
           <view class="video-remove" @tap="removePublishVideo">×</view>
         </view>
 
         <view v-if="publishForm.images.length" class="image-grid">
           <view v-for="(item, index) in publishForm.images" :key="`${item}-${index}`" class="image-item">
-            <image class="image-thumb" :src="item" mode="aspectFill"></image>
+            <CachedImage :src="item" container-class="image-thumb" image-class="image-thumb" :fallback-to-remote="false" />
             <view class="image-badge">{{ index === 0 ? '封面' : `图 ${index + 1}` }}</view>
             <view class="image-remove" @tap="removePublishImage(index)">×</view>
           </view>
@@ -116,6 +122,24 @@
         <view class="location-actions">
           <view class="location-action-btn" @tap="reloadCurrentLocation">重新定位</view>
           <view class="location-action-btn strong" @tap="openLocationPicker">选择附近位置</view>
+        </view>
+      </view>
+
+      <view class="form-card track-card">
+        <view class="section-head">
+          <text class="field-label no-gap">徒步轨迹</text>
+          <text class="section-tip">可选，把当前保存的徒步路线一起发出去</text>
+        </view>
+        <view v-if="hasAttachableTrack" class="track-body">
+          <view class="track-copy">
+            <text class="track-title">附带最近一次徒步记录</text>
+            <text class="track-desc">{{ trackSummaryText }}</text>
+          </view>
+          <switch :checked="publishForm.attachHikingTrack" color="#ff7c62" @change="handleTrackSwitchChange" />
+        </view>
+        <view v-else class="track-empty">
+          <text class="track-empty-title">还没有可附带的轨迹</text>
+          <text class="track-empty-desc">先去徒步模式记录一段路线，返回这里就能选择附带。</text>
         </view>
       </view>
 
@@ -163,11 +187,16 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { onLoad } from '@dcloudio/uni-app'
+import CachedImage from '../../components/CachedImage.vue'
 import { getStoredAuthToken, getStoredAuthUser } from '../../common/auth-storage'
+import { createGuideTrackPayload, formatTrackDuration } from '../../common/guide-track'
+import { sumTrackDistanceKm } from '../../common/hiking-metrics'
 import { addPublishedGuide, defaultCoverOptions, persistGuideImages, persistLocalFile } from '../../common/published-guides'
 import { getCurrentLocation, getNearbyLocationOptions, reverseGeocode } from '../../services/amap'
 import { createGuide, hasGuideApi, uploadGuideMedia } from '../../services/guides'
+import { useHikingStore } from '../../stores/useHikingStore'
 
 const publishSubmitting = ref(false)
 const publishError = ref('')
@@ -178,13 +207,19 @@ const showLocationPicker = ref(false)
 const locationOptionsLoading = ref(false)
 const locationOptions = ref([])
 const publishForm = reactive(createDefaultPublishForm())
+const hikingStore = useHikingStore()
+const { trackPoints, isTracking } = storeToRefs(hikingStore)
 
 const systemInfo = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync() : {}
 const statusBarHeight = systemInfo.statusBarHeight || 20
 const statusBarStyle = computed(() => ({ height: `${statusBarHeight}px` }))
 const currentUser = computed(() => getStoredAuthUser() || null)
 
-const authorAvatar = computed(() => currentUser.value?.avatar_url || currentUser.value?.avatar || defaultCoverOptions[1])
+const authorAvatarUrl = computed(() => currentUser.value?.avatar_url || currentUser.value?.avatar || '')
+const authorInitial = computed(() => {
+  const nickname = String(currentUser.value?.nickname || '新疆旅行者').trim()
+  return nickname ? nickname.slice(0, 1) : '新'
+})
 const derivedContentType = computed(() => {
   if (publishForm.video) {
     return '视频'
@@ -223,6 +258,27 @@ const locationStatusClass = computed(() => ({
   active: !locating.value && !locationFailed.value,
   warn: locationFailed.value,
 }))
+const normalizedTrackPoints = computed(() => Array.isArray(trackPoints.value) ? trackPoints.value.filter(Boolean) : [])
+const attachableTrack = computed(() => {
+  if (!normalizedTrackPoints.value.length) {
+    return null
+  }
+
+  return createGuideTrackPayload(normalizedTrackPoints.value)
+})
+const hasAttachableTrack = computed(() => Boolean(attachableTrack.value?.points?.length))
+const trackSummaryText = computed(() => {
+  const track = attachableTrack.value
+  if (!track) {
+    return '暂无可附带轨迹'
+  }
+
+  const distanceKm = Number(track.distanceKm || sumTrackDistanceKm(track.points) || 0)
+  const pointCount = Number(track.pointCount || track.points.length || 0)
+  const durationText = formatTrackDuration(track.durationMs)
+  const trackingState = isTracking.value ? '记录中' : '已保存'
+  return `${trackingState} · ${distanceKm.toFixed(2)} km · ${durationText} · ${pointCount} 个轨迹点`
+})
 
 onLoad(() => {
   if (!currentUser.value) {
@@ -237,6 +293,10 @@ onLoad(() => {
     return
   }
 
+  hikingStore.hydrate()
+  if (!hasAttachableTrack.value) {
+    publishForm.attachHikingTrack = false
+  }
   loadCurrentLocation()
   setTimeout(() => {
     autoFocusTitle.value = true
@@ -254,7 +314,12 @@ function createDefaultPublishForm() {
     images: [],
     video: '',
     videoPoster: '',
+    attachHikingTrack: false,
   }
+}
+
+function handleTrackSwitchChange(event) {
+  publishForm.attachHikingTrack = Boolean(event?.detail?.value)
 }
 
 async function loadCurrentLocation() {
@@ -262,7 +327,12 @@ async function loadCurrentLocation() {
   locationFailed.value = false
 
   try {
-    const coords = await getCurrentLocation()
+    const coords = await getCurrentLocation({
+      providers: ['plus-geolocation', 'gcj02', 'system'],
+      coordsType: 'gcj02',
+      gpsTimeout: 12000,
+      networkTimeout: 5000,
+    })
     const regeo = await reverseGeocode(coords.longitude, coords.latitude)
     const address = regeo?.addressComponent || {}
     const city = normalizeLocationPart(address.city)
@@ -278,6 +348,11 @@ async function loadCurrentLocation() {
     publishForm.locationLatitude = null
     locationOptions.value = []
     locationFailed.value = true
+    uni.showToast({
+      title: error?.message || '定位失败',
+      icon: 'none',
+      duration: 2200,
+    })
   } finally {
     locating.value = false
   }
@@ -325,6 +400,11 @@ async function openLocationPicker() {
   if (!publishForm.locationLongitude || !publishForm.locationLatitude) {
     await loadCurrentLocation()
   }
+
+  if (!publishForm.locationLongitude || !publishForm.locationLatitude) {
+    return
+  }
+
   showLocationPicker.value = true
 }
 
@@ -480,6 +560,7 @@ async function submitPublishedGuide() {
       contentType,
     })
     const summaryText = publishForm.excerpt.trim() || (highlights.length ? `#${highlights.join(' #')}` : '来自新疆旅途中的一条真实笔记。')
+    const attachedTrack = publishForm.attachHikingTrack ? attachableTrack.value : null
     const guidePayload = {
       title: publishForm.title.trim(),
       excerpt: summaryText,
@@ -503,6 +584,7 @@ async function submitPublishedGuide() {
       coverAspectRatio: savedVideo ? 1.45 : (savedImages.length ? 1.34 : 0.84),
       primaryTab: '发现',
       cityTab: '同城',
+      hikingTrack: attachedTrack,
     }
 
     const createdGuide = useRemoteApi
@@ -626,6 +708,16 @@ function validatePublishedGuide() {
   border-radius: 50%;
   background: #f3f4f6;
   flex-shrink: 0;
+}
+
+.composer-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #8b5e34;
+  background: linear-gradient(135deg, #fde7cf, #f7d6b4);
 }
 
 .composer-name {
@@ -893,6 +985,39 @@ function validatePublishedGuide() {
 .location-pill.warn {
   background: #fff5e8;
   color: #d97706;
+}
+
+.track-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.track-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-title,
+.track-empty-title {
+  display: block;
+  font-size: 27rpx;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.track-desc,
+.track-empty-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: $theme-muted;
+}
+
+.track-empty {
+  padding: 4rpx 0;
 }
 
 .location-picker-mask {

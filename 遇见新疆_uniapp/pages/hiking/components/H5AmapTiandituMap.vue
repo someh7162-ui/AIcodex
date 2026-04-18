@@ -4,7 +4,7 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { createAmapPoint, createAmapTiandituLayers, loadAmapWebSdk } from '../../../services/amap-web'
+import { createAmapPoint, loadAmapWebSdk } from '../../../services/amap-web'
 
 const props = defineProps({
   mapCenter: {
@@ -33,7 +33,7 @@ const containerRef = ref(null)
 
 let AMapRef = null
 let map = null
-let tiandituLayers = []
+let baseLayers = []
 let markerOverlays = []
 let polylineOverlays = []
 
@@ -121,22 +121,41 @@ function syncPolyline() {
   })
 }
 
-function syncTiandituLayers() {
+function buildBaseLayers() {
+  if (!AMapRef) {
+    return []
+  }
+
+  if (props.mapModeKey === 'satellite') {
+    return [
+      new AMapRef.TileLayer.Satellite(),
+      new AMapRef.TileLayer.RoadNet(),
+    ]
+  }
+
+  return [new AMapRef.TileLayer()]
+}
+
+function syncBaseLayers() {
   if (!map || !AMapRef) {
     return
   }
 
-  if (tiandituLayers.length) {
-    tiandituLayers.forEach((layer) => {
+  if (baseLayers.length) {
+    baseLayers.forEach((layer) => {
       if (layer && typeof layer.setMap === 'function') {
         layer.setMap(null)
       }
     })
-    tiandituLayers = []
+    baseLayers = []
   }
 
-  tiandituLayers = createAmapTiandituLayers(AMapRef, props.mapModeKey)
-  tiandituLayers.forEach((layer) => layer.setMap(map))
+  baseLayers = buildBaseLayers()
+  if (typeof map.setLayers === 'function') {
+    map.setLayers(baseLayers)
+    return
+  }
+  baseLayers.forEach((layer) => layer.setMap(map))
 }
 
 async function initMap() {
@@ -166,7 +185,7 @@ async function initMap() {
     resizeEnable: true,
   })
 
-  syncTiandituLayers()
+  syncBaseLayers()
   syncMarkers()
   syncPolyline()
 }
@@ -184,7 +203,7 @@ watch(() => props.mapScale, () => {
 })
 
 watch(() => props.mapModeKey, () => {
-  syncTiandituLayers()
+  syncBaseLayers()
 })
 
 watch(() => props.mapMarkers, () => {
@@ -199,13 +218,13 @@ onBeforeUnmount(() => {
   clearOverlays(markerOverlays)
   clearOverlays(polylineOverlays)
   if (map) {
-    if (tiandituLayers.length) {
-      tiandituLayers.forEach((layer) => {
+    if (baseLayers.length) {
+      baseLayers.forEach((layer) => {
         if (layer && typeof layer.setMap === 'function') {
           layer.setMap(null)
         }
       })
-      tiandituLayers = []
+      baseLayers = []
     }
     map.destroy()
     map = null

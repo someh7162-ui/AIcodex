@@ -1,5 +1,4 @@
 import { destinationList } from '../common/destination-data'
-import { getGuideList } from '../common/guide-data'
 import { AI_BASE_URL, AI_MODEL, getAiApiKey } from '../config/ai'
 
 const SYSTEM_PROMPT = `你是“云起天山”App 内的 AI 旅游助手。你的主要职责是回答新疆旅行相关问题，并优先基于应用内已有景点、攻略和基础信息给出建议。
@@ -25,8 +24,6 @@ const essentialInfo = [
 ]
 
 const MAX_DESTINATION_CONTEXT_ITEMS = 24
-const MAX_GUIDE_CONTEXT_ITEMS = 8
-
 function request(url, data) {
   return new Promise((resolve, reject) => {
     uni.request({
@@ -72,11 +69,6 @@ function buildDestinationSummary() {
 }
 
 function buildGuideSummary() {
-  const guideText = getGuideList()
-    .slice(0, MAX_GUIDE_CONTEXT_ITEMS)
-    .map((item) => `${item.title}（${item.category}）：${item.excerpt}`)
-    .join('\n')
-
   const tipText = quickTips
     .map((item) => `${item.title}：${item.description}`)
     .join('\n')
@@ -85,7 +77,7 @@ function buildGuideSummary() {
     .map((item) => `${item.label}：${item.value}`)
     .join('\n')
 
-  return `${guideText}\n${tipText}\n${infoText}`
+  return `${tipText}\n${infoText}`
 }
 
 function buildTravelContext(extraContext = '') {

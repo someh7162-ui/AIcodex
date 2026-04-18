@@ -170,14 +170,45 @@ export async function getWalkingRoute(origin, destination) {
   return data.route.paths[0]
 }
 
-export async function getCurrentLocation() {
+export async function getCurrentLocation(options = {}) {
   await ensureLocationPermission()
 
-  const attempts = [
-    { label: 'uni-gcj02', run: () => requestUniLocation('gcj02') },
-    { label: 'uni-wgs84', run: () => requestUniLocation('wgs84') },
-    { label: 'plus-geolocation', run: () => requestPlusLocation() },
-  ]
+  const attempts = []
+  const gpsTimeout = Number(options.gpsTimeout || 18000)
+  const networkTimeout = Number(options.networkTimeout || 6000)
+  const preferredProviders = Array.isArray(options.providers)
+    ? options.providers.map((item) => String(item || '').toLowerCase()).filter(Boolean)
+    : null
+
+  const allowsProvider = (name) => !preferredProviders || preferredProviders.includes(String(name || '').toLowerCase())
+
+  if (isAndroidRuntime()) {
+    if (allowsProvider('gps')) {
+      attempts.push({
+        label: 'android-gps',
+        run: () => requestAndroidProviderLocation('gps', { ...options, timeout: gpsTimeout, maximumAgeMs: Number(options.gpsMaximumAgeMs || 120000) }),
+      })
+    }
+
+    if (allowsProvider('network')) {
+      attempts.push({
+        label: 'android-network',
+        run: () => requestAndroidProviderLocation('network', { ...options, timeout: networkTimeout, maximumAgeMs: Number(options.networkMaximumAgeMs || 30000) }),
+      })
+    }
+  }
+
+  if (allowsProvider('system') || allowsProvider('plus-geolocation')) {
+    attempts.push({ label: 'plus-geolocation', run: () => requestPlusLocation(options) })
+  }
+
+  if (allowsProvider('gcj02') || allowsProvider('uni-gcj02')) {
+    attempts.push({ label: 'uni-gcj02', run: () => requestUniLocation('gcj02') })
+  }
+
+  if (allowsProvider('wgs84') || allowsProvider('uni-wgs84')) {
+    attempts.push({ label: 'uni-wgs84', run: () => requestUniLocation('wgs84') })
+  }
 
   let lastError = null
   const errors = []
@@ -228,6 +259,10 @@ function normalizeLocationError(error) {
   }
 
   return text || raw || '定位失败，请检查系统定位服务是否开启'
+}
+
+function isAndroidRuntime() {
+  return typeof plus !== 'undefined' && plus.os && plus.os.name === 'Android' && plus.android
 }
 
 function ensureLocationPermission() {
@@ -324,13 +359,20 @@ function requestUniLocation(type = 'gcj02') {
       isHighAccuracy: true,
       highAccuracyExpireTime: 12000,
       geocode: false,
-      success: resolve,
+      success: (location) => {
+        resolve({
+          ...location,
+          provider: `uni-${type}`,
+          coordinateSystem: type,
+          source: 'uni.getLocation',
+        })
+      },
       fail: reject,
     })
   })
 }
 
-function requestPlusLocation() {
+function requestPlusLocation(options = {}) {
   return new Promise((resolve, reject) => {
     if (typeof plus === 'undefined' || !plus.geolocation || typeof plus.geolocation.getCurrentPosition !== 'function') {
       reject(new Error('当前环境不支持 plus 定位'))
@@ -346,8 +388,11 @@ function requestPlusLocation() {
           altitude: Number(coords.altitude || 0),
           accuracy: Number(coords.accuracy || 0),
           speed: Number(coords.speed || 0),
+          bearing: Number(coords.heading || 0),
           timestamp: Number(position.timestamp || Date.now()),
-          provider: 'plus-geolocation',
+          provider: String(coords.provider || position.provider || 'plus-geolocation'),
+          coordinateSystem: String(position.coordsType || options.coordsType || 'gcj02'),
+          source: 'plus.geolocation',
         })
       },
       (error) => {
@@ -355,13 +400,163 @@ function requestPlusLocation() {
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
+        timeout: Number(options.timeout || 12000),
         maximumAge: 0,
         provider: 'system',
-        coordsType: 'gcj02',
+        coordsType: options.coordsType || 'gcj02',
       },
     )
   })
+}
+
+function requestAndroidProviderLocation(providerName, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!isAndroidRuntime()) {
+      reject(new Error('当前环境不支持 Android 原生定位'))
+      return
+    }
+
+    let locationManager = null
+    let listener = null
+    let timer = null
+    let finished = false
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+
+      if (locationManager && listener) {
+        try {
+          locationManager.removeUpdates(listener)
+        } catch (error) {
+          // ignore cleanup failure
+        }
+      }
+
+      listener = null
+      locationManager = null
+    }
+
+    const finishResolve = (value) => {
+      if (finished) {
+        return
+      }
+      finished = true
+      cleanup()
+      resolve(value)
+    }
+
+    const finishReject = (error) => {
+      if (finished) {
+        return
+      }
+      finished = true
+      cleanup()
+      reject(error)
+    }
+
+    try {
+      const main = plus.android.runtimeMainActivity()
+      const Context = plus.android.importClass('android.content.Context')
+      plus.android.importClass('android.location.LocationManager')
+      const locationManagerObject = main.getSystemService(Context.LOCATION_SERVICE)
+      plus.android.importClass(locationManagerObject)
+      locationManager = locationManagerObject
+
+      if (!locationManager || !locationManager.isProviderEnabled(providerName)) {
+        finishReject(new Error(providerName === 'gps' ? 'GPS 未开启' : '网络定位不可用'))
+        return
+      }
+
+      const cached = normalizeAndroidLocation(locationManager.getLastKnownLocation(providerName), providerName, 'android-last-known')
+      const maximumAgeMs = Number(options.maximumAgeMs || 15000)
+      if (cached && Date.now() - cached.timestamp <= maximumAgeMs) {
+        finishResolve(cached)
+        return
+      }
+
+      listener = plus.android.implements('android.location.LocationListener', {
+        onLocationChanged(location) {
+          const normalized = normalizeAndroidLocation(location, providerName, 'android-live')
+          if (normalized) {
+            finishResolve(normalized)
+          }
+        },
+        onProviderDisabled(name) {
+          finishReject(new Error(`${String(name || providerName).toUpperCase()} 已关闭`))
+        },
+        onProviderEnabled() {},
+        onStatusChanged() {},
+      })
+
+      const timeout = Number(options.timeout || (providerName === 'gps' ? 8000 : 5000))
+      timer = setTimeout(() => {
+        const lastKnown = normalizeAndroidLocation(locationManager.getLastKnownLocation(providerName), providerName, 'android-timeout-last-known')
+        if (lastKnown) {
+          finishResolve(lastKnown)
+          return
+        }
+        finishReject(new Error(`${providerName.toUpperCase()} 定位超时`))
+      }, timeout)
+
+      if (typeof locationManager.requestSingleUpdate === 'function') {
+        locationManager.requestSingleUpdate(providerName, listener, main.getMainLooper())
+        return
+      }
+
+      locationManager.requestLocationUpdates(providerName, 0, 0, listener, main.getMainLooper())
+    } catch (error) {
+      finishReject(new Error(normalizeLocationError(error)))
+    }
+  })
+}
+
+function normalizeAndroidLocation(location, providerName, source) {
+  if (!location) {
+    return null
+  }
+
+  try {
+    plus.android.importClass(location)
+  } catch (error) {
+    return null
+  }
+
+  const latitude = Number(location.getLatitude())
+  const longitude = Number(location.getLongitude())
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null
+  }
+
+  const altitude = typeof location.hasAltitude === 'function' && location.hasAltitude()
+    ? Number(location.getAltitude())
+    : 0
+  const accuracy = typeof location.hasAccuracy === 'function' && location.hasAccuracy()
+    ? Number(location.getAccuracy())
+    : 0
+  const speed = typeof location.hasSpeed === 'function' && location.hasSpeed()
+    ? Number(location.getSpeed())
+    : 0
+  const bearing = typeof location.hasBearing === 'function' && location.hasBearing()
+    ? Number(location.getBearing())
+    : 0
+  const timestamp = Number(location.getTime ? location.getTime() : Date.now())
+  const provider = String(location.getProvider ? location.getProvider() : providerName || 'android-location')
+
+  return {
+    latitude,
+    longitude,
+    altitude,
+    accuracy,
+    speed,
+    bearing,
+    timestamp,
+    provider,
+    coordinateSystem: 'wgs84',
+    source,
+  }
 }
 
 export async function getLocationAndWeather() {

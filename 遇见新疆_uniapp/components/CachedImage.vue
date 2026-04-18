@@ -18,6 +18,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { downloadRemoteFile } from '../common/app-http'
+import { API_ORIGIN } from '../config/api'
 
 const props = defineProps({
   src: {
@@ -40,10 +41,44 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  fallbackToRemote: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const loading = ref(true)
 const currentSrc = ref('')
+
+function canUseRemoteFallback() {
+  const platform = uni.getSystemInfoSync().platform
+  return props.fallbackToRemote && (platform === 'devtools' || platform === 'web')
+}
+
+function canUseDirectRemote(url) {
+  const raw = String(url || '')
+  return canUseRemoteFallback() || (props.fallbackToRemote && raw.startsWith(API_ORIGIN))
+}
+
+function toDisplayPath(filePath) {
+  const raw = String(filePath || '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  if (/^(https?:|file:|content:|blob:|data:)/i.test(raw)) {
+    return raw
+  }
+
+  if (typeof plus !== 'undefined' && plus.io && typeof plus.io.convertLocalFileSystemURL === 'function') {
+    const absolutePath = plus.io.convertLocalFileSystemURL(raw)
+    if (absolutePath) {
+      return absolutePath.startsWith('file://') ? absolutePath : `file://${absolutePath}`
+    }
+  }
+
+  return raw
+}
 
 function storageKey(url) {
   return `cached-image:${encodeURIComponent(url)}`
@@ -60,7 +95,7 @@ async function resolveImage(url) {
 
   // 本地路径直接使用，不走下载缓存
   if (!/^https?:\/\//.test(url)) {
-    currentSrc.value = url
+    currentSrc.value = toDisplayPath(url)
     loading.value = false
     return
   }
@@ -69,18 +104,18 @@ async function resolveImage(url) {
   const cachedPath = uni.getStorageSync(key)
 
   if (cachedPath) {
-    currentSrc.value = cachedPath
+    currentSrc.value = toDisplayPath(cachedPath)
     loading.value = false
     return
   }
 
-  currentSrc.value = url
-
-  const platform = uni.getSystemInfoSync().platform
-  if (platform === 'devtools' || platform === 'web') {
+  if (canUseDirectRemote(url)) {
+    currentSrc.value = url
     loading.value = false
     return
   }
+
+  currentSrc.value = ''
 
   try {
     const downloadRes = await downloadRemoteFile(url)
@@ -91,17 +126,21 @@ async function resolveImage(url) {
 
     if (typeof plus !== 'undefined' && downloadRes.tempFilePath.startsWith('_doc/')) {
       uni.setStorageSync(key, downloadRes.tempFilePath)
-      currentSrc.value = downloadRes.tempFilePath
+      currentSrc.value = toDisplayPath(downloadRes.tempFilePath)
       return
     }
 
     const saveRes = await uni.saveFile({ tempFilePath: downloadRes.tempFilePath })
     if (saveRes.savedFilePath) {
       uni.setStorageSync(key, saveRes.savedFilePath)
-      currentSrc.value = saveRes.savedFilePath
+      currentSrc.value = toDisplayPath(saveRes.savedFilePath)
+      return
     }
+
   } catch (error) {
-    currentSrc.value = url
+    if (canUseDirectRemote(url)) {
+      currentSrc.value = url
+    }
   } finally {
     loading.value = false
   }
@@ -113,7 +152,12 @@ function handleLoad() {
 
 function handleError() {
   loading.value = false
-  currentSrc.value = props.src
+  if (canUseDirectRemote(props.src)) {
+    currentSrc.value = props.src
+    return
+  }
+
+  currentSrc.value = ''
 }
 
 watch(

@@ -1,3 +1,35 @@
+import { normalizeApiAssetUrl } from '../config/api'
+
+function normalizeLegacyUrl(value) {
+  const text = String(value || '')
+  if (!text) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(text) || /^(111\.20\.31\.227:34144|frp-arm\.com:44637)(\/|\?|$)/i.test(text) || text.startsWith('/')) {
+    return normalizeApiAssetUrl(text)
+  }
+  return text
+}
+
+function normalizePayloadUrls(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizePayloadUrls)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizePayloadUrls(item)])
+    )
+  }
+
+  if (typeof value === 'string') {
+    return normalizeLegacyUrl(value)
+  }
+
+  return value
+}
+
 function parseResponseData(text) {
   const raw = String(text || '')
   if (!raw) {
@@ -5,7 +37,7 @@ function parseResponseData(text) {
   }
 
   try {
-    return JSON.parse(raw)
+    return normalizePayloadUrls(JSON.parse(raw))
   } catch (error) {
     return raw
   }
@@ -70,7 +102,10 @@ function uniRequest(options) {
   return new Promise((resolve, reject) => {
     uni.request({
       ...options,
-      success: (res) => resolve(res),
+      success: (res) => resolve({
+        ...res,
+        data: normalizePayloadUrls(res.data),
+      }),
       fail: (error) => reject(error),
     })
   })
@@ -86,14 +121,15 @@ export function requestJson(options) {
 
 export function downloadRemoteFile(url) {
   return new Promise((resolve, reject) => {
+    const normalizedUrl = normalizeLegacyUrl(url)
     if (
-      /^https:/i.test(String(url || ''))
+      /^https:/i.test(String(normalizedUrl || ''))
       && typeof plus !== 'undefined'
       && plus.downloader
       && typeof plus.downloader.createDownload === 'function'
     ) {
       const filename = `_doc/cache/image-${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const task = plus.downloader.createDownload(url, { filename }, (download, status) => {
+      const task = plus.downloader.createDownload(normalizedUrl, { filename }, (download, status) => {
         if (status === 200 && download.filename) {
           resolve({ statusCode: status, tempFilePath: download.filename })
           return
@@ -106,7 +142,7 @@ export function downloadRemoteFile(url) {
     }
 
     uni.downloadFile({
-      url,
+      url: normalizedUrl,
       success: (res) => resolve(res),
       fail: (error) => reject(error),
     })

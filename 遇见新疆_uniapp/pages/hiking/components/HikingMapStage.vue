@@ -1,34 +1,35 @@
 <template>
   <view class="map-container">
+    <!-- #ifdef H5 -->
     <H5AmapTiandituMap
-      v-if="isWebMapRuntime && hasMapLocation"
+      v-if="storeHasMapLocation && hasAmapKey()"
       class="live-map"
-      :map-center="mapCenter"
+      :map-center="storeMapCenter"
       :map-scale="mapScale"
-      :map-polyline="mapPolyline"
-      :map-markers="mapMarkers"
+      :map-polyline="storeMapPolyline"
+      :map-markers="storeMapMarkers"
       :map-mode-key="mapModeKey"
     />
-    <map
-      v-else-if="hasMapLocation"
+    <!-- #endif -->
+
+    <!-- #ifdef APP-PLUS -->
+    <HikingTileMapCompat
+      v-if="storeHasMapLocation && hasMapSupport()"
       class="live-map"
-      :latitude="mapCenter.latitude"
-      :longitude="mapCenter.longitude"
-      :scale="mapScale"
-      :show-location="true"
-      :enable-rotate="true"
-      :enable-traffic="false"
-      :polyline="mapPolyline"
-      :markers="mapMarkers"
-    ></map>
+      :map-center="storeMapCenter"
+      :map-scale="mapScale"
+      :map-polyline="storeMapPolyline"
+      :map-markers="storeMapMarkers"
+      :map-mode-key="mapModeKey"
+    />
+    <!-- #endif -->
+
     <view v-else class="map-placeholder">
       <view class="map-fallback-copy">
         <text class="fallback-title">等待定位中</text>
         <text class="fallback-desc">已接入原生 GPS 定位与徒步地图桥接，获取到位置后会显示真实地图与轨迹。</text>
       </view>
     </view>
-
-    <view class="map-overlay"></view>
 
     <view class="map-mode-switch" @tap="$emit('cycle-map-mode')">
       <text class="map-mode-label">切换地图</text>
@@ -37,56 +38,37 @@
 
     <view class="map-tools">
       <view class="tool-btn" @tap="$emit('refresh')">
-        <text class="icon"></text>
+        <text class="icon">刷</text>
         <text class="text">定位刷新</text>
       </view>
       <view class="tool-btn" @tap="$emit('recenter')">
-        <text class="icon"></text>
+        <text class="icon">回</text>
         <text class="text">回到当前</text>
       </view>
       <view class="tool-btn" @tap="$emit('toggle-track')">
-        <text class="icon"></text>
-        <text class="text">{{ isTracking ? '停止记录' : '开始记录' }}</text>
+        <text class="icon">记</text>
+        <text class="text">{{ storeIsTracking ? '停止记录' : '开始记录' }}</text>
       </view>
     </view>
 
-    <view class="offline-banner" :class="{ visible: isOffline }">
-      <text class="offline-title">{{ isOffline ? '离线 GPS 模式' : '在线地图模式' }}</text>
-      <text class="offline-desc">{{ offlineHint }}</text>
-    </view>
   </view>
 </template>
 
 <script setup>
+// #ifdef H5
 import H5AmapTiandituMap from './H5AmapTiandituMap.vue'
+// #endif
+// #ifdef APP-PLUS
+import HikingTileMapCompat from './HikingTileMapCompat.vue'
+// #endif
+import { storeToRefs } from 'pinia'
 import { hasAmapKey } from '../../../config/amap'
-
-const isWebMapRuntime = typeof window !== 'undefined' && typeof document !== 'undefined' && hasAmapKey()
+import { useHikingStore } from '../../../stores/useHikingStore'
 
 defineProps({
-  hasMapLocation: {
-    type: Boolean,
-    default: false,
-  },
-  mapCenter: {
-    type: Object,
-    default: null,
-  },
   mapScale: {
     type: Number,
     default: 15,
-  },
-  mapPolyline: {
-    type: Array,
-    default: () => [],
-  },
-  mapMarkers: {
-    type: Array,
-    default: () => [],
-  },
-  isTracking: {
-    type: Boolean,
-    default: false,
   },
   mapModeLabel: {
     type: String,
@@ -107,17 +89,37 @@ defineProps({
 })
 
 defineEmits(['refresh', 'recenter', 'toggle-track', 'cycle-map-mode'])
+
+const hikingStore = useHikingStore()
+const {
+  isTracking: storeIsTracking,
+  hasMapLocation: storeHasMapLocation,
+  mapCenter: storeMapCenter,
+  mapPolyline: storeMapPolyline,
+  mapMarkers: storeMapMarkers,
+} = storeToRefs(hikingStore)
+
+function hasMapSupport() {
+  // #ifdef APP-PLUS
+  return true
+  // #endif
+
+  return hasAmapKey()
+}
 </script>
 
 <style scoped lang="scss">
 .map-container {
   flex: 1;
+  min-height: 0;
   position: relative;
+  display: flex;
   overflow: hidden;
 }
 
 .live-map,
 .map-placeholder {
+  flex: 1;
   width: 100%;
   height: 100%;
 }
@@ -227,6 +229,9 @@ defineEmits(['refresh', 'recenter', 'toggle-track', 'cycle-map-mode'])
   .icon {
     font-size: 40rpx;
     margin-bottom: 4rpx;
+    color: #fff;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .text {
@@ -237,39 +242,4 @@ defineEmits(['refresh', 'recenter', 'toggle-track', 'cycle-map-mode'])
   }
 }
 
-.offline-banner {
-  position: absolute;
-  left: 24rpx;
-  bottom: 26rpx;
-  right: 180rpx;
-  z-index: 3;
-  padding: 18rpx 20rpx;
-  border-radius: 22rpx;
-  background: rgba(10, 10, 10, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-}
-
-.offline-banner.visible {
-  border-color: rgba(255, 149, 0, 0.22);
-  box-shadow: 0 0 0 2rpx rgba(255, 149, 0, 0.08);
-}
-
-.offline-title,
-.offline-desc {
-  display: block;
-}
-
-.offline-title {
-  font-size: 22rpx;
-  font-weight: 700;
-  color: #fff;
-}
-
-.offline-desc {
-  margin-top: 8rpx;
-  font-size: 18rpx;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.68);
-}
 </style>
