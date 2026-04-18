@@ -36,7 +36,7 @@ function buildGuideQueryBase(viewerParamIndex = 1) {
     SELECT
       g.*,
       COALESCE(u.nickname, g.author) AS resolved_nickname,
-      COALESCE(NULLIF(g.author_avatar_url, ''), u.avatar_url, '') AS resolved_author_avatar_url,
+      COALESCE(NULLIF(u.avatar_url, ''), NULLIF(g.author_avatar_url, ''), '') AS resolved_author_avatar_url,
       COALESCE(author_stats.follower_count, 0) AS author_follower_count,
       COALESCE(author_stats.following_count, 0) AS author_following_count,
       COALESCE(viewer_follow.is_following_author, FALSE) AS is_following_author,
@@ -255,6 +255,14 @@ function publicUser(row) {
     email: row.email,
     avatar_url: row.avatar_url || '',
     status: row.status,
+  }
+}
+
+function mapPublicUser(req, row) {
+  const user = publicUser(row)
+  return {
+    ...user,
+    avatar_url: buildAssetUrl(req, user.avatar_url || ''),
   }
 }
 
@@ -676,6 +684,21 @@ app.post('/api/users/me/avatar', authMiddleware, avatarUpload.single('avatar'), 
   const avatarUrl = `/uploads/avatars/${req.file.filename}`
   await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [avatarUrl, req.user.sub])
   res.json({ avatar_url: buildAssetUrl(req, avatarUrl) })
+}))
+
+app.get('/api/users/me', authMiddleware, asyncRoute(async (req, res) => {
+  const result = await db.query(
+    `SELECT id, email, nickname, avatar_url, status FROM users WHERE id = $1 LIMIT 1`,
+    [req.user.sub]
+  )
+
+  const user = result.rows[0]
+  if (!user) {
+    res.status(404).json({ message: '用户不存在。' })
+    return
+  }
+
+  res.json({ user: mapPublicUser(req, user) })
 }))
 
 app.patch('/api/users/me', authMiddleware, asyncRoute(async (req, res) => {

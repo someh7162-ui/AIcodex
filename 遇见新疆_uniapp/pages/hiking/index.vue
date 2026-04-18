@@ -11,18 +11,23 @@
       :is-offline="isOffline"
       :mode-text="headerModeText"
       :debug-text="debugText"
+      :sunset-countdown-text="sunsetCountdownText"
+      :sunset-time-text="sunsetTimeText"
+      :sunset-risk-level="sunsetRiskLevel"
+      :guard-status-text="guardStatusText"
+      :guard-status-level="guardStatusLevel"
     />
 
     <HikingMapStage
       :map-scale="mapScale"
-      :map-mode-label="mapModeLabel"
       :map-mode-key="currentMapMode"
       :is-offline="isOffline"
       :offline-hint="offlineHint"
       @refresh="refreshLocation"
       @recenter="recenterMap"
       @toggle-track="handleStart"
-      @cycle-map-mode="cycleMapMode"
+      @zoom-in="zoomInMap"
+      @zoom-out="zoomOutMap"
     />
 
     <HikingBottomControls
@@ -32,19 +37,22 @@
       :emergency-contact-phones="emergencyContactPhones"
       @sos-message="handleEmergencySms"
       @toggle-track="handleStart"
+      @finish-track="handleFinishTrack"
       @toggle-guard="toggleGuard"
     />
   </view>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import HikingHeaderPanel from './components/HikingHeaderPanel.vue'
 import HikingMapStage from './components/HikingMapStage.vue'
 import HikingBottomControls from './components/HikingBottomControls.vue'
+import { evaluateStationaryRisk, formatStationaryStatus } from '../../common/hiking-guard'
 import { hikingModeMock } from '../../common/hiking-mode'
+import { formatSunsetTime, getSunsetInfo } from '../../common/sun-times'
 import {
   formatCoordinate,
   formatMetric,
@@ -56,6 +64,9 @@ import { useHikingStore } from '../../stores/useHikingStore'
 const MAP_MODES = [
   { key: 'satellite', label: '高德卫星图' },
 ]
+const MIN_MAP_SCALE = 12
+const MAX_MAP_SCALE = 18
+const RECENTER_MAP_SCALE = 16
 
 const hikingStore = useHikingStore()
 const {
@@ -70,6 +81,13 @@ const mapScale = ref(15)
 const currentMapMode = ref(MAP_MODES[0].key)
 const networkOnline = ref(true)
 const debugLogs = ref([])
+const nowTick = ref(Date.now())
+const lastGuardPromptAt = ref(0)
+const guardCooldownUntil = ref(0)
+const lastGuardSafeAt = ref(0)
+const lastSunsetWarningLevel = ref(0)
+const lastSunsetWarningDate = ref('')
+let sunsetTimer = null
 let hasPromptedLocationSettings = false
 const coordinateText = computed(() => {
   if (!currentLocation.value) {
@@ -103,6 +121,56 @@ const distanceText = computed(() => sumTrackDistanceKm(trackPoints.value).toFixe
 const mapModeLabel = computed(() => MAP_MODES.find((item) => item.key === currentMapMode.value)?.label || '标准地图')
 const headerModeText = computed(() => `${isOffline.value ? '离线' : '在线'} · ${mapModeLabel.value}`)
 const debugText = computed(() => debugLogs.value.join(' | '))
+const sunsetInfo = computed(() => getSunsetInfo(currentLocation.value, new Date(nowTick.value)))
+const sunsetCountdownText = computed(() => sunsetInfo.value?.countdownText || '')
+const sunsetTimeText = computed(() => formatSunsetTime(sunsetInfo.value?.sunsetAt))
+const sunsetRiskLevel = computed(() => {
+  const minutes = Number(sunsetInfo.value?.minutesToSunset)
+  if (!Number.isFinite(minutes)) {
+    return 'safe'
+  }
+  if (minutes <= 0) {
+    return 'passed'
+  }
+  if (minutes <= 60) {
+    return 'danger'
+  }
+  if (minutes <= 120) {
+    return 'warning'
+  }
+  return 'safe'
+})
+const stationaryRisk = computed(() => evaluateStationaryRisk({
+  isGuardMode: isGuardMode.value,
+  isTracking: isTracking.value,
+  trackPoints: trackPoints.value,
+  currentLocation: currentLocation.value,
+  now: nowTick.value,
+  minutesToSunset: sunsetInfo.value?.minutesToSunset,
+  cooldownUntil: guardCooldownUntil.value,
+  lastConfirmedAt: lastGuardSafeAt.value,
+}))
+const guardStatusText = computed(() => {
+  if (!isGuardMode.value) {
+    return ''
+  }
+  if (stationaryRisk.value.active) {
+    return `${formatStationaryStatus(stationaryRisk.value)}，请确认状态`
+  }
+  return '守护中'
+})
+const guardStatusLevel = computed(() => {
+  if (!isGuardMode.value) {
+    return 'safe'
+  }
+  if (stationaryRisk.value.level === 'danger') {
+    return 'danger'
+  }
+  if (stationaryRisk.value.level === 'warning') {
+    return 'warning'
+  }
+  return 'safe'
+})
 const emergencyContactName = computed(() => hikingModeMock.emergency?.primaryName || '紧急联系人')
 const emergencyContactPhones = computed(() => {
   const emergency = hikingModeMock.emergency || {}
@@ -119,10 +187,73 @@ const offlineHint = computed(() => {
 onLoad(async () => {
   hikingStore.hydrate()
   bindNetworkState()
+  startSunsetTimer()
   if (!currentLocation.value) {
     await refreshLocation()
   }
 })
+
+watch(
+  () => [sunsetInfo.value?.localDateKey || '', sunsetInfo.value?.minutesToSunset ?? null],
+  ([dateKey, minutes]) => {
+    if (!dateKey) {
+      lastSunsetWarningLevel.value = 0
+      lastSunsetWarningDate.value = ''
+      return
+    }
+
+    if (dateKey !== lastSunsetWarningDate.value) {
+      lastSunsetWarningDate.value = dateKey
+      lastSunsetWarningLevel.value = 0
+    }
+
+    const nextLevel = getSunsetWarningLevel(minutes)
+    if (!nextLevel || nextLevel <= lastSunsetWarningLevel.value) {
+      return
+    }
+
+    lastSunsetWarningLevel.value = nextLevel
+    showSunsetWarning(nextLevel, minutes)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [stationaryRisk.value.active, stationaryRisk.value.observedMinutes, isGuardMode.value],
+  ([active, observedMinutes, guardEnabled]) => {
+    if (!guardEnabled || !active) {
+      return
+    }
+
+    const currentTime = nowTick.value
+    if (currentTime - Number(lastGuardPromptAt.value || 0) < 10 * 60000) {
+      return
+    }
+
+    lastGuardPromptAt.value = currentTime
+    uni.showModal({
+      title: '守护提醒',
+      content: `你已连续停留约 ${observedMinutes} 分钟。若只是休息，请点“我安全”；若感觉不适或迷路，请尽快使用 SOS 求助。`,
+      confirmText: '我安全',
+      cancelText: '稍后提醒',
+      success: ({ confirm }) => {
+        if (confirm) {
+          acknowledgeGuardSafe(20)
+          uni.showToast({
+            title: '已继续守护',
+            icon: 'none',
+          })
+          return
+        }
+
+        guardCooldownUntil.value = Date.now() + 10 * 60000
+      },
+      fail: () => {
+        guardCooldownUntil.value = Date.now() + 10 * 60000
+      },
+    })
+  }
+)
 
 onUnload(() => {
   cleanup()
@@ -188,8 +319,42 @@ async function handleStart() {
   }
 }
 
+async function handleFinishTrack() {
+  if (!isTracking.value) {
+    return
+  }
+
+  uni.showModal({
+    title: '结束并保存轨迹',
+    content: '长按后将结束本次徒步记录，并把轨迹保存到发布页可选列表。',
+    confirmText: '结束保存',
+    cancelText: '继续记录',
+    success: async ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+
+      try {
+        const savedTrack = await hikingStore.finishTracking()
+        const pointCount = Number(savedTrack?.pointCount || savedTrack?.points?.length || 0)
+        uni.showToast({
+          title: pointCount ? `已保存 ${pointCount} 个点` : '轨迹已保存',
+          icon: 'none',
+          duration: 2200,
+        })
+      } catch (error) {
+        uni.showToast({
+          title: error?.message || '结束保存失败',
+          icon: 'none',
+          duration: 2500,
+        })
+      }
+    },
+  })
+}
+
 async function recenterMap() {
-  mapScale.value = 16
+  mapScale.value = RECENTER_MAP_SCALE
   if (!currentLocation.value) {
     await refreshLocation()
     return
@@ -201,11 +366,35 @@ async function recenterMap() {
   })
 }
 
-async function cycleMapMode() {
-  uni.showToast({
-    title: '当前固定为高德卫星图',
-    icon: 'none',
-  })
+function zoomInMap() {
+  const nextScale = clampMapScale(mapScale.value + 1)
+  if (nextScale === mapScale.value) {
+    uni.showToast({
+      title: '已经放到最大了',
+      icon: 'none',
+    })
+    return
+  }
+
+  mapScale.value = nextScale
+}
+
+function zoomOutMap() {
+  const nextScale = clampMapScale(mapScale.value - 1)
+  if (nextScale === mapScale.value) {
+    uni.showToast({
+      title: '已经缩到最小了',
+      icon: 'none',
+    })
+    return
+  }
+
+  mapScale.value = nextScale
+}
+
+function clampMapScale(value) {
+  const scale = Number(value) || RECENTER_MAP_SCALE
+  return Math.max(MIN_MAP_SCALE, Math.min(MAX_MAP_SCALE, Math.round(scale)))
 }
 
 function handleEmergencySms() {
@@ -267,6 +456,9 @@ function handleEmergencySms() {
 
 function toggleGuard() {
   isGuardMode.value = !isGuardMode.value
+  if (isGuardMode.value) {
+    acknowledgeGuardSafe(5)
+  }
   uni.showToast({
     title: isGuardMode.value ? '守护模式已开启' : '守护模式已关闭',
     icon: 'none',
@@ -274,6 +466,27 @@ function toggleGuard() {
 }
 
 function cleanup() {
+  if (sunsetTimer) {
+    clearInterval(sunsetTimer)
+    sunsetTimer = null
+  }
+}
+
+function startSunsetTimer() {
+  nowTick.value = Date.now()
+  if (sunsetTimer) {
+    clearInterval(sunsetTimer)
+  }
+
+  sunsetTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 60000)
+}
+
+function acknowledgeGuardSafe(cooldownMinutes = 20) {
+  const currentTime = Date.now()
+  lastGuardSafeAt.value = currentTime
+  guardCooldownUntil.value = currentTime + cooldownMinutes * 60000
 }
 
 function appendDebugLog(message) {
@@ -302,6 +515,59 @@ function maybePromptLocationSettings(message) {
       }
     },
   })
+}
+
+function getSunsetWarningLevel(minutes) {
+  const value = Number(minutes)
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+  if (value <= 0) {
+    return 3
+  }
+  if (value <= 60) {
+    return 2
+  }
+  if (value <= 120) {
+    return 1
+  }
+  return 0
+}
+
+function showSunsetWarning(level, minutes) {
+  if (!currentLocation.value) {
+    return
+  }
+
+  const countdown = sunsetCountdownText.value || '日落临近'
+  if (level === 1) {
+    uni.showModal({
+      title: '日落提醒',
+      content: `${countdown}。天黑后风险会明显上升，请尽快评估是否原路下撤，避免继续深入。`,
+      confirmText: '知道了',
+      showCancel: false,
+    })
+    return
+  }
+
+  if (level === 2) {
+    uni.showModal({
+      title: '尽快下撤',
+      content: `${countdown}。现在已接近日落，建议立即停止继续深入，优先下撤或寻找安全停留点。`,
+      confirmText: '收到',
+      showCancel: false,
+    })
+    return
+  }
+
+  if (level === 3 && Number(minutes) > -30) {
+    uni.showModal({
+      title: '已过日落',
+      content: `${countdown}。请立即结束继续行进，优先确保视线、保暖和安全停留条件。`,
+      confirmText: '知道了',
+      showCancel: false,
+    })
+  }
 }
 
 function formatLocationDebug(location) {

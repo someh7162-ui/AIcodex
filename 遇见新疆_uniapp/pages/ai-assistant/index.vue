@@ -1,9 +1,9 @@
 <template>
   <view class="page-shell assistant-page">
     <view class="page-scroll">
-      <view class="hero-gradient assistant-banner">
-        <view class="hero-inner section">
-          <view class="private-tools">
+        <view class="hero-gradient assistant-banner">
+          <view class="hero-inner section">
+            <view class="private-tools">
             <input v-model="apiKeyInput" password class="mini-key-input" />
             <view class="mini-action" @tap="saveApiKeyToStorage">存</view>
             <view class="mini-action dark" :class="{ disabled: testing }" @tap="runConnectionTest">
@@ -12,48 +12,12 @@
           </view>
 
           <view class="hero-copy">
-            <text class="hero-kicker">Meet Xinjiang AI</text>
-            <text class="banner-title">AI 旅游助手</text>
-            <text class="banner-subtitle">面向新疆旅行场景的问答与行程建议</text>
-          </view>
-
-          <view class="hero-meta">
-            <view class="meta-item">
-              <text class="meta-label">定位</text>
-              <text class="meta-value">目的地推荐</text>
-            </view>
-            <view class="meta-divider"></view>
-            <view class="meta-item">
-              <text class="meta-label">能力</text>
-              <text class="meta-value">行程规划</text>
-            </view>
-            <view class="meta-divider"></view>
-            <view class="meta-item">
-              <text class="meta-label">风格</text>
-              <text class="meta-value">简洁实用</text>
-            </view>
+            <text class="banner-title">灵鹿</text>
           </view>
 
           <view class="hero-status">
             <text class="status-dot" :class="{ ready: hasApiKey }"></text>
             <text class="hero-status-text">{{ hasApiKey ? '连接已就绪' : '内部配置未填写' }}</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="section capability-shell">
-        <view class="capability-grid">
-          <view class="capability-item">
-            <text class="capability-name">行程规划</text>
-            <text class="capability-desc">按天数给出新疆旅行安排</text>
-          </view>
-          <view class="capability-item">
-            <text class="capability-name">目的地选择</text>
-            <text class="capability-desc">结合景点资料给路线建议</text>
-          </view>
-          <view class="capability-item">
-            <text class="capability-name">出行提醒</text>
-            <text class="capability-desc">装备、预算与季节建议</text>
           </view>
         </view>
       </view>
@@ -101,10 +65,6 @@
 
       <view class="section section-block">
         <view class="dialogue-head">
-          <view>
-            <text class="section-title">智能顾问工作台</text>
-            <text class="dialogue-note muted-text">结构化输出新疆旅行建议</text>
-          </view>
           <view class="dialogue-state" :class="{ active: sending }">
             <text class="dialogue-state-dot"></text>
             <text>{{ sending ? '生成中' : `${messages.length} 条记录` }}</text>
@@ -117,10 +77,12 @@
 
         <view class="dialogue-surface">
           <view v-if="!messages.length" class="empty-card">
-            <text class="empty-title">从一个具体问题开始</text>
-            <text class="empty-desc muted-text">
-              例如新疆第一次去怎么玩、喀纳斯安排几天、乌鲁木齐夜游吃什么。
-            </text>
+            <view class="message-row assistant intro-row">
+              <view class="message-bubble assistant-bubble intro-bubble">
+                <text class="message-role">灵鹿</text>
+                <text class="message-content intro-content">HI！我是灵鹿，有关于西域旅游的问题都可以问我哦！</text>
+              </view>
+            </view>
           </view>
 
           <view v-else class="message-list">
@@ -130,8 +92,8 @@
               class="message-row"
               :class="{ mine: item.role === 'user', assistant: item.role === 'assistant' }"
             >
-              <view class="message-bubble" :class="{ 'assistant-bubble': item.role === 'assistant' }">
-                <text class="message-role">{{ item.role === 'user' ? '用户' : 'AI助手' }}</text>
+              <view class="message-bubble" :class="item.role === 'user' ? 'user-bubble' : 'assistant-bubble'">
+                <text class="message-role">{{ item.role === 'user' ? '我' : '灵鹿' }}</text>
                 <text v-if="item.role === 'user'" class="message-content user-content">{{ item.content }}</text>
                 <view v-else class="assistant-markdown">
                   <block v-for="(block, blockIndex) in getMessageBlocks(item)" :key="`${item.id}-${blockIndex}`">
@@ -208,10 +170,10 @@
           class="composer-input"
           auto-height
           maxlength="800"
-          placeholder="输入你的旅行问题，例如：新疆 7 天怎么安排？"
+          placeholder="输入你想问灵鹿的问题，例如：新疆 7 天怎么安排？"
         />
         <view class="composer-foot">
-          <text class="muted-text composer-hint">{{ hasApiKey ? '已连接 AI 旅游助手' : '请先填写内部 Key' }}</text>
+          <text class="muted-text composer-hint">{{ hasApiKey ? '已连接灵鹿' : '请先填写内部 Key' }}</text>
           <view class="send-btn" :class="{ disabled: !canSend }" @tap="sendDraft">发送</view>
         </view>
       </view>
@@ -246,16 +208,30 @@ const incomingContextDesc = ref('')
 const incomingContextSource = ref('景区页')
 const incomingPrompt = ref('')
 const incomingContext = ref('')
+let responseRevealTimer = null
 
 const hasApiKey = computed(() => Boolean(savedApiKey.value))
 const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value && hasApiKey.value)
 
 function getMessageBlocks(item) {
-  if (!item?.content) {
+  const content = getRenderableMessageContent(item)
+  if (!content) {
     return []
   }
 
-  return parseAssistantMarkdown(item.content)
+  return parseAssistantMarkdown(content)
+}
+
+function getRenderableMessageContent(item) {
+  if (!item) {
+    return ''
+  }
+
+  if (item.role === 'assistant') {
+    return item.displayContent ?? item.content ?? ''
+  }
+
+  return item.content || ''
 }
 
 function parseAssistantMarkdown(content) {
@@ -421,14 +397,28 @@ function loadMessages() {
   try {
     const stored = uni.getStorageSync(AI_MESSAGE_STORAGE)
     const parsed = JSON.parse(stored || '[]')
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed.map((item) => ({
+          ...item,
+          displayContent: item?.role === 'assistant' ? (item.displayContent || item.content || '') : undefined,
+        }))
+      : []
   } catch (error) {
     return []
   }
 }
 
 function persistMessages() {
-  uni.setStorageSync(AI_MESSAGE_STORAGE, JSON.stringify(messages.value))
+  uni.setStorageSync(AI_MESSAGE_STORAGE, JSON.stringify(messages.value.map((item) => {
+    if (item?.role === 'assistant') {
+      return {
+        ...item,
+        displayContent: undefined,
+      }
+    }
+
+    return item
+  })))
 }
 
 function createMessage(role, content) {
@@ -486,6 +476,7 @@ async function runConnectionTest() {
 }
 
 function clearConversation() {
+  stopResponseReveal()
   uni.showModal({
     title: '清空会话',
     content: '确认清空当前 AI 对话记录吗？清空后无法恢复。',
@@ -520,6 +511,7 @@ async function sendQuestion(question, extraContext = '') {
   }
 
   errorMessage.value = ''
+  stopResponseReveal()
   const userMessage = createMessage('user', content)
   const nextMessages = [...messages.value, userMessage]
   messages.value = nextMessages
@@ -529,9 +521,12 @@ async function sendQuestion(question, extraContext = '') {
 
   try {
     const answer = await chatWithTravelAssistant(nextMessages, extraContext)
-    messages.value = [...nextMessages, createMessage('assistant', answer)]
-    persistMessages()
-    await scrollToConversationBottom()
+    const assistantMessage = {
+      ...createMessage('assistant', answer),
+      displayContent: '',
+    }
+    messages.value = [...nextMessages, assistantMessage]
+    await revealAssistantMessage(assistantMessage.id, answer)
   } catch (error) {
     messages.value = nextMessages
     persistMessages()
@@ -543,6 +538,48 @@ async function sendQuestion(question, extraContext = '') {
     })
   } finally {
     sending.value = false
+  }
+}
+
+async function revealAssistantMessage(messageId, fullText) {
+  const text = String(fullText || '')
+  const chunkSize = text.length > 900 ? 24 : text.length > 400 ? 16 : 10
+  let cursor = 0
+
+  return new Promise((resolve) => {
+    const step = async () => {
+      const target = messages.value.find((item) => item.id === messageId)
+      if (!target) {
+        stopResponseReveal()
+        resolve()
+        return
+      }
+
+      cursor = Math.min(text.length, cursor + chunkSize)
+      target.displayContent = text.slice(0, cursor)
+      messages.value = [...messages.value]
+      await scrollToConversationBottom()
+
+      if (cursor >= text.length) {
+        target.displayContent = text
+        messages.value = [...messages.value]
+        persistMessages()
+        stopResponseReveal()
+        resolve()
+        return
+      }
+
+      responseRevealTimer = setTimeout(step, 40)
+    }
+
+    step()
+  })
+}
+
+function stopResponseReveal() {
+  if (responseRevealTimer) {
+    clearTimeout(responseRevealTimer)
+    responseRevealTimer = null
   }
 }
 
@@ -676,60 +713,12 @@ function sendIncomingPrompt() {
   max-width: 520rpx;
 }
 
-.hero-kicker {
-  display: block;
-  font-size: 22rpx;
-  letter-spacing: 6rpx;
-  text-transform: uppercase;
-  opacity: 0.72;
-}
-
 .banner-title {
   display: block;
   margin-top: 18rpx;
   font-size: 64rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
-}
-
-.banner-subtitle {
-  display: block;
-  margin-top: 18rpx;
-  font-size: 26rpx;
-  opacity: 0.92;
-  line-height: 1.6;
-}
-
-.hero-meta {
-  margin-top: 38rpx;
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  padding: 24rpx 0;
-  border-top: 2rpx solid rgba(255, 255, 255, 0.18);
-  border-bottom: 2rpx solid rgba(255, 255, 255, 0.18);
-}
-
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.meta-label {
-  font-size: 20rpx;
-  opacity: 0.68;
-}
-
-.meta-value {
-  font-size: 26rpx;
-  font-weight: 600;
-}
-
-.meta-divider {
-  width: 2rpx;
-  height: 42rpx;
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .hero-status {
@@ -753,10 +742,6 @@ function sendIncomingPrompt() {
 .hero-status-text {
   font-size: 22rpx;
   opacity: 0.88;
-}
-
-.capability-shell {
-  margin-top: 30rpx;
 }
 
 .context-shell {
@@ -818,33 +803,6 @@ function sendIncomingPrompt() {
 .secondary-action {
   background: rgba(196, 69, 54, 0.08);
   color: $theme-color;
-}
-
-.capability-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18rpx;
-}
-
-.capability-item {
-  min-height: 168rpx;
-  padding: 28rpx 24rpx;
-  border-top: 4rpx solid rgba(196, 69, 54, 0.22);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.capability-name {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 600;
-}
-
-.capability-desc {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  color: $theme-muted;
-  line-height: 1.6;
 }
 
 .test-shell {
@@ -976,20 +934,11 @@ function sendIncomingPrompt() {
 }
 
 .empty-card {
-  padding: 16rpx 0;
+  padding: 6rpx 0;
 }
 
-.empty-title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 600;
-}
-
-.empty-desc {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 24rpx;
-  line-height: 1.7;
+.intro-row {
+  width: 100%;
 }
 
 .message-list {
@@ -1017,10 +966,12 @@ function sendIncomingPrompt() {
   background: #f7f2ec;
 }
 
-.message-row.mine .message-bubble {
+.message-row.mine .message-bubble,
+.user-bubble {
   border-radius: 24rpx;
   background: $theme-color;
   color: #ffffff;
+  box-shadow: 0 14rpx 28rpx rgba(196, 69, 54, 0.16);
 }
 
 .assistant-bubble {
@@ -1030,6 +981,10 @@ function sendIncomingPrompt() {
   border: 2rpx solid rgba(196, 69, 54, 0.09);
   border-left: 8rpx solid rgba(196, 69, 54, 0.44);
   box-shadow: 0 16rpx 34rpx rgba(45, 24, 16, 0.05);
+}
+
+.intro-bubble {
+  max-width: 100%;
 }
 
 .message-role {
@@ -1050,6 +1005,10 @@ function sendIncomingPrompt() {
 
 .user-content {
   word-break: break-word;
+}
+
+.intro-content {
+  color: $theme-text;
 }
 
 .assistant-markdown {
@@ -1213,18 +1172,6 @@ function sendIncomingPrompt() {
 }
 
 @media screen and (max-width: 720rpx) {
-  .capability-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-meta {
-    gap: 16rpx;
-  }
-
-  .meta-value {
-    font-size: 24rpx;
-  }
-
   .dialogue-head {
     align-items: flex-start;
   }

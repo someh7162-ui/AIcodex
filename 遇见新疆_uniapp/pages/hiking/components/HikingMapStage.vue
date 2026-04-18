@@ -31,12 +31,15 @@
       </view>
     </view>
 
-    <view class="map-mode-switch" @tap="$emit('cycle-map-mode')">
-      <text class="map-mode-label">切换地图</text>
-      <text class="map-mode-value">{{ mapModeLabel }}</text>
-    </view>
-
     <view class="map-tools">
+      <view class="zoom-group">
+        <view class="zoom-btn" @tap="$emit('zoom-in')">
+          <text class="zoom-symbol">+</text>
+        </view>
+        <view class="zoom-btn" @tap="$emit('zoom-out')">
+          <text class="zoom-symbol">-</text>
+        </view>
+      </view>
       <view class="tool-btn" @tap="$emit('refresh')">
         <text class="icon">刷</text>
         <text class="text">定位刷新</text>
@@ -70,10 +73,6 @@ defineProps({
     type: Number,
     default: 15,
   },
-  mapModeLabel: {
-    type: String,
-    default: '标准地图',
-  },
   mapModeKey: {
     type: String,
     default: 'normal',
@@ -88,7 +87,7 @@ defineProps({
   },
 })
 
-defineEmits(['refresh', 'recenter', 'toggle-track', 'cycle-map-mode'])
+defineEmits(['refresh', 'recenter', 'toggle-track', 'zoom-in', 'zoom-out'])
 
 const hikingStore = useHikingStore()
 const {
@@ -181,34 +180,32 @@ function hasMapSupport() {
   gap: 20rpx;
 }
 
-.map-mode-switch {
-  position: absolute;
-  top: 28rpx;
-  right: 24rpx;
-  z-index: 3;
-  min-width: 172rpx;
-  padding: 18rpx 22rpx;
-  border-radius: 22rpx;
-  background: rgba(16, 18, 20, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.28);
+.zoom-group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: rgba(44, 44, 46, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
 }
 
-.map-mode-label,
-.map-mode-value {
-  display: block;
+.zoom-btn {
+  width: 110rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.map-mode-label {
-  font-size: 18rpx;
-  letter-spacing: 1rpx;
-  color: rgba(255, 255, 255, 0.58);
+.zoom-btn + .zoom-btn {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.map-mode-value {
-  margin-top: 6rpx;
-  font-size: 24rpx;
+.zoom-symbol {
+  font-size: 44rpx;
+  line-height: 1;
   font-weight: 700;
   color: #fff;
 }

@@ -38,9 +38,10 @@
       </view>
 
       <view class="main-action">
-        <view class="btn-circle start" @tap="emit('toggle-track')">
+        <view class="btn-circle start" @tap="emit('toggle-track')" @longpress="handleFinishLongPress">
           <text class="btn-text">{{ isTracking ? '暂停' : '开始' }}</text>
         </view>
+        <text class="main-action-tip">{{ isTracking ? '长按结束并保存' : '点击开始记录' }}</text>
       </view>
 
       <view class="side-action">
@@ -75,7 +76,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message'])
+const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message', 'finish-track'])
 
 const SHORT_ON_MS = 250
 const LONG_ON_MS = 750
@@ -108,6 +109,13 @@ async function handleFlashlightAction() {
 function handleSmsAction() {
   emit('sos-message')
   closeSosMenu()
+}
+
+function handleFinishLongPress() {
+  if (!props.isTracking) {
+    return
+  }
+  emit('finish-track')
 }
 
 async function toggleSosFlash() {
@@ -402,6 +410,18 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+}
+
+.main-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.main-action-tip {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.56);
 }
 
 .side-action {

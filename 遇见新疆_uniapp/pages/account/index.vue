@@ -124,7 +124,7 @@ import { onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import CachedImage from '../../components/CachedImage.vue'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
-import { getMyFavoriteGuides, getMyGuides, getMyStats, updateUserProfile, uploadAvatar } from '../../services/auth'
+import { getMyFavoriteGuides, getMyGuides, getMyProfile, getMyStats, updateUserProfile, uploadAvatar } from '../../services/auth'
 import { normalizeApiAssetUrl } from '../../config/api'
 
 const currentUser = ref(null)
@@ -145,7 +145,7 @@ const editNickname = ref('')
 const isLoggedIn = computed(() => Boolean(authToken.value && currentUser.value))
 const profileName = computed(() => currentUser.value?.nickname || '新疆漫游者')
 const profileEmail = computed(() => currentUser.value?.email || '登录后同步收藏与行程')
-const avatarUrl = computed(() => currentUser.value?.avatar_url || '')
+const avatarUrl = computed(() => currentUser.value?.avatar_url || currentUser.value?.avatar || '')
 const profileInitial = computed(() => profileName.value.slice(0, 2))
 
 const profileStats = computed(() => isLoggedIn.value
@@ -166,10 +166,11 @@ onShow(() => {
   loadAuthState()
 })
 
-function loadAuthState() {
+async function loadAuthState() {
   authToken.value = getStoredAuthToken()
   currentUser.value = getStoredAuthUser()
   if (isLoggedIn.value) {
+    await refreshCurrentUser()
     loadMyStats()
     loadMyGuides()
     loadFavoriteGuides()
@@ -183,6 +184,25 @@ function loadAuthState() {
     favoriteCount: 0,
     visitedCount: 0,
     interactionCount: 0,
+  }
+}
+
+async function refreshCurrentUser() {
+  if (!authToken.value) {
+    return
+  }
+
+  try {
+    const res = await getMyProfile(authToken.value)
+    const nextUser = res?.user || null
+    if (!nextUser) {
+      return
+    }
+
+    saveAuthSession({ token: authToken.value, user: nextUser })
+    currentUser.value = nextUser
+  } catch {
+    currentUser.value = getStoredAuthUser()
   }
 }
 
@@ -285,8 +305,14 @@ async function saveProfile() {
 
   try {
     const res = await updateUserProfile(authToken.value, payload)
-    saveAuthSession({ token: authToken.value, user: res.user })
-    currentUser.value = res.user
+    const merged = {
+      ...currentUser.value,
+      ...res.user,
+      avatar_url: res.user?.avatar_url || currentUser.value?.avatar_url || currentUser.value?.avatar || '',
+      avatar: res.user?.avatar || res.user?.avatar_url || currentUser.value?.avatar || currentUser.value?.avatar_url || '',
+    }
+    saveAuthSession({ token: authToken.value, user: merged })
+    currentUser.value = merged
     editModalVisible.value = false
     uni.showToast({ title: '资料已更新', icon: 'success' })
   } catch (e) {

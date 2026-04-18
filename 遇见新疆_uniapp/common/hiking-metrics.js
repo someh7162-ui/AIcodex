@@ -34,7 +34,7 @@ export function formatCoordinate(value, type) {
     ? (numeric >= 0 ? 'N' : 'S')
     : (numeric >= 0 ? 'E' : 'W')
 
-  return `${Math.abs(numeric).toFixed(5)}deg${suffix}`
+  return `${Math.abs(numeric).toFixed(5)}°${suffix}`
 }
 
 export function getDistanceKm(from, to) {

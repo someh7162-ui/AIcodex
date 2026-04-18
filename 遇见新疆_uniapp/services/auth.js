@@ -7,10 +7,12 @@ function normalizeUser(user) {
     return user
   }
 
+  const avatarUrl = normalizeApiAssetUrl(user.avatar_url || user.avatar)
+
   return {
     ...user,
-    avatar_url: normalizeApiAssetUrl(user.avatar_url),
-    avatar: normalizeApiAssetUrl(user.avatar),
+    avatar_url: avatarUrl,
+    avatar: avatarUrl,
   }
 }
 
@@ -25,7 +27,8 @@ function normalizeResponseData(data) {
     data: data.data && typeof data.data === 'object'
       ? {
           ...data.data,
-          avatar_url: normalizeApiAssetUrl(data.data.avatar_url),
+          avatar_url: normalizeApiAssetUrl(data.data.avatar_url || data.data.avatar),
+          avatar: normalizeApiAssetUrl(data.data.avatar || data.data.avatar_url),
         }
       : data.data,
   }
@@ -117,6 +120,10 @@ export function uploadAvatar(token, filePath) {
 
 export function updateUserProfile(token, payload) {
   return authRequest('/users/me', 'PATCH', token, payload)
+}
+
+export function getMyProfile(token) {
+  return authRequest('/users/me', 'GET', token, undefined)
 }
 
 export function getMyGuides(token) {

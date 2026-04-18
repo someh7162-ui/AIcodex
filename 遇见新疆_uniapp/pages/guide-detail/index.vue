@@ -6,7 +6,7 @@
         <view class="icon-btn" @tap="goBack">‹</view>
         <view class="author-strip">
           <CachedImage
-            :src="guide.authorAvatar"
+            :src="guideAuthorAvatar"
             container-class="author-avatar-shell"
             image-class="author-avatar"
             style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
@@ -128,11 +128,15 @@
 
       <view class="input-preview section" @tap="focusComment">
         <CachedImage
+          v-if="commentInputAvatar"
           :src="commentInputAvatar"
           container-class="comment-avatar-shell"
           image-class="comment-avatar"
           style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
         />
+        <view v-else class="comment-avatar-shell comment-avatar-placeholder">
+          <text class="comment-avatar-placeholder-text">{{ commentInputInitial }}</text>
+        </view>
         <view class="fake-input">留下你的想法吧</view>
       </view>
 
@@ -148,11 +152,15 @@
       <view v-else-if="comments.length" class="comment-list section">
         <view v-for="c in comments" :key="c.id" class="comment-item">
           <CachedImage
+            v-if="commentAvatar(c)"
             :src="commentAvatar(c)"
             container-class="comment-avatar-shell"
             image-class="comment-avatar"
             style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
           />
+          <view v-else class="comment-avatar-shell comment-avatar-placeholder">
+            <text class="comment-avatar-placeholder-text">{{ getAvatarInitial(c.nickname) }}</text>
+          </view>
           <view class="comment-body-wrap">
             <view class="comment-row-top">
               <view class="comment-user-meta">
@@ -224,11 +232,11 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
-import { clearAuthSession, getStoredAuthToken, getStoredAuthUser } from '../../common/auth-storage'
+import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
 import { formatTrackDuration } from '../../common/guide-track'
 import { buildCurrentMarker, buildTrackPolyline, formatCoordinate } from '../../common/hiking-metrics'
 import HikingTileMapCompat from '../hiking/components/HikingTileMapCompat.vue'
-import { followUser, unfollowUser } from '../../services/auth'
+import { followUser, getMyProfile, unfollowUser } from '../../services/auth'
 import {
   deleteGuideComment,
   getGuideComments,
@@ -276,8 +284,17 @@ const isOwnAuthor = computed(() => {
   const authorId = guide.value?.authorId
   return Boolean(authorId && currentUser.value?.id && authorId === currentUser.value.id)
 })
+const currentUserAvatar = computed(() => currentUser.value?.avatar_url || currentUser.value?.avatar || '')
+const guideAuthorAvatar = computed(() => {
+  if (isOwnAuthor.value && currentUserAvatar.value) {
+    return currentUserAvatar.value
+  }
+
+  return guide.value?.authorAvatar || ''
+})
 const showFollowButton = computed(() => Boolean(guide.value?.authorId))
-const commentInputAvatar = computed(() => currentUser.value?.avatar_url || guide.value?.authorAvatar || '')
+const commentInputAvatar = computed(() => currentUserAvatar.value)
+const commentInputInitial = computed(() => getAvatarInitial(currentUser.value?.nickname || currentUser.value?.email || ''))
 const commentSubmitDisabled = computed(() => commentSubmitting.value || !commentInput.value.trim())
 const commentSummary = computed(() => {
   if (commentError.value) {
@@ -297,10 +314,19 @@ function commentAvatar(comment) {
   }
 
   if (comment?.authorId && currentUser.value?.id && comment.authorId === currentUser.value.id) {
-    return currentUser.value?.avatar_url || guide.value?.authorAvatar || ''
+    return currentUserAvatar.value
   }
 
-  return guide.value?.authorAvatar || ''
+  return ''
+}
+
+function getAvatarInitial(value) {
+  const text = String(value || '').trim()
+  if (!text) {
+    return '游'
+  }
+
+  return text.slice(0, 1).toUpperCase()
 }
 const followButtonText = computed(() => {
   if (!guide.value?.authorId) {
@@ -360,6 +386,7 @@ onLoad(async (options) => {
   const id = options?.id || ''
   detailLoading.value = true
   try {
+    await refreshCurrentUser()
     guide.value = await getGuideDetail(id)
     likeCount.value = Number(guide.value?.likesCount) || 0
     saveCount.value = Number(guide.value?.saveCount) || 0
@@ -374,6 +401,21 @@ onLoad(async (options) => {
   }
   activeImageIndex.value = 0
 })
+
+async function refreshCurrentUser() {
+  const token = getStoredAuthToken()
+  if (!token) {
+    return
+  }
+
+  try {
+    const res = await getMyProfile(token)
+    if (res?.user) {
+      saveAuthSession({ token, user: res.user })
+    }
+  } catch {
+  }
+}
 
 async function toggleLike() {
   const token = getStoredAuthToken()
@@ -774,6 +816,19 @@ function formatCommentTime(value) {
   height: 72rpx;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.comment-avatar-placeholder {
+  background: linear-gradient(135deg, #ffe8d6 0%, #ffd2c2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.comment-avatar-placeholder-text {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #b45309;
 }
 
 .author-name,

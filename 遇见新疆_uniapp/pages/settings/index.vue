@@ -77,7 +77,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
-import { updateUserProfile } from '../../services/auth'
+import { getMyProfile, updateUserProfile } from '../../services/auth'
 
 const currentUser = ref(null)
 const authToken = ref('')
@@ -95,9 +95,28 @@ const menuItems = [
 ]
 
 onShow(() => {
+  loadAuthState()
+})
+
+async function loadAuthState() {
   authToken.value = getStoredAuthToken()
   currentUser.value = getStoredAuthUser()
-})
+  if (!authToken.value) {
+    return
+  }
+
+  try {
+    const res = await getMyProfile(authToken.value)
+    const nextUser = res?.user || null
+    if (!nextUser) {
+      return
+    }
+    saveAuthSession({ token: authToken.value, user: nextUser })
+    currentUser.value = nextUser
+  } catch {
+    currentUser.value = getStoredAuthUser()
+  }
+}
 
 function goBack() {
   uni.navigateBack()
@@ -116,7 +135,12 @@ async function saveProfile() {
   }
   try {
     const res = await updateUserProfile(authToken.value, { nickname })
-    const merged = { ...currentUser.value, ...res.user, avatar_url: currentUser.value?.avatar_url || res.user?.avatar_url }
+    const merged = {
+      ...currentUser.value,
+      ...res.user,
+      avatar_url: res.user?.avatar_url || currentUser.value?.avatar_url || currentUser.value?.avatar || '',
+      avatar: res.user?.avatar || res.user?.avatar_url || currentUser.value?.avatar || currentUser.value?.avatar_url || '',
+    }
     saveAuthSession({ token: authToken.value, user: merged })
     currentUser.value = merged
     editModalVisible.value = false

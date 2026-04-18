@@ -8,7 +8,6 @@
         :class="{ active: current === item.path }"
         @tap="go(item.path)"
       >
-        <view class="tab-icon">{{ item.short }}</view>
         <text class="tab-label">{{ item.label }}</text>
       </view>
     </view>
@@ -24,11 +23,10 @@ const props = defineProps({
 })
 
 const items = [
-  { path: '/pages/home/index', label: '首页', short: 'H' },
-  { path: '/pages/destinations/index', label: '目的地', short: 'D' },
-  { path: '/pages/guides/index', label: '攻略指南', short: 'G' },
-  { path: '/pages/ai-assistant/index', label: 'AI助手', short: 'AI' },
-  { path: '/pages/account/index', label: '我的', short: 'A' },
+  { path: '/pages/home/index', label: '首页' },
+  { path: '/pages/destinations/index', label: '目的地' },
+  { path: '/pages/guides/index', label: '攻略指南' },
+  { path: '/pages/account/index', label: '我的' },
 ]
 
 function go(path) {
@@ -54,7 +52,7 @@ function go(path) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14rpx 18rpx;
+  padding: 14rpx 16rpx;
   border-radius: 32rpx;
 }
 
@@ -62,11 +60,9 @@ function go(path) {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
-  padding: 10rpx 0;
+  padding: 18rpx 0;
   color: $theme-muted;
 }
 
@@ -74,25 +70,9 @@ function go(path) {
   color: $theme-color;
 }
 
-.tab-icon {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 18rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(212, 165, 116, 0.16);
-  font-size: 24rpx;
-  font-weight: 700;
-}
-
-.tab-item.active .tab-icon {
-  background: $theme-color;
-  color: #ffffff;
-}
-
 .tab-label {
-  font-size: 22rpx;
+  font-size: 24rpx;
+  font-weight: 600;
   white-space: nowrap;
 }
 </style>

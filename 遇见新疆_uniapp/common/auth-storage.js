@@ -6,10 +6,12 @@ function normalizeStoredUser(user) {
     return user
   }
 
+  const avatarUrl = normalizeApiAssetUrl(user.avatar_url || user.avatar)
+
   return {
     ...user,
-    avatar_url: normalizeApiAssetUrl(user.avatar_url),
-    avatar: normalizeApiAssetUrl(user.avatar),
+    avatar_url: avatarUrl,
+    avatar: avatarUrl,
   }
 }
 

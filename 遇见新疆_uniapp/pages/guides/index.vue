@@ -5,7 +5,7 @@
         <view class="status-space" :style="statusBarStyle"></view>
 
         <view class="hero-topbar section">
-          <view class="hero-action left-action">≡</view>
+          <view class="hero-action left-action chat-entry" @tap="openAiAssistant">💬</view>
           <view class="primary-tabs">
             <view
               v-for="tab in primaryTabs"
@@ -20,15 +20,28 @@
             </view>
           </view>
           <view class="hero-actions">
-            <view class="hero-action">⌕</view>
-            <view class="hero-action">◎</view>
+            <view class="hero-action" :class="{ active: showSearchBar }" @tap="toggleSearchBar">⌕</view>
+            <view class="hero-action text-action" :class="{ active: showSortPanel }" @tap="toggleSortPanel">筛</view>
           </view>
         </view>
 
-        <view class="section hero-copy">
-          <text class="hero-title">新疆发现页</text>
-          <text class="hero-subtitle">真实攻略流已接入后台，发现页会优先推荐你关注作者发布的新内容。</text>
+        <view v-if="showSearchBar" class="section search-shell">
+          <view class="search-bar">
+            <text class="search-icon">⌕</text>
+            <input
+              v-model="searchQuery"
+              class="search-input"
+              type="text"
+              confirm-type="search"
+              maxlength="40"
+              placeholder="搜索作者、标题或相关内容"
+              placeholder-class="search-placeholder"
+            />
+            <view v-if="searchQuery" class="search-clear" @tap="clearSearch">×</view>
+          </view>
+          <text class="search-hint">支持搜索作者昵称、攻略标题、摘要和标签</text>
         </view>
+
       </view>
 
       <view class="subnav-shell section">
@@ -47,20 +60,6 @@
         </scroll-view>
         <view class="subnav-more" @tap="toggleCategoryPanel">
           <text class="more-icon">▾</text>
-        </view>
-      </view>
-
-      <view class="section trend-strip">
-        <view class="trend-card">
-          <view class="trend-main">
-            <text class="trend-label">热议</text>
-            <text class="trend-value">{{ activeSubTab }}</text>
-          </view>
-          <text class="trend-copy">{{ feedSummary }}</text>
-        </view>
-        <view class="trend-card accent-card">
-          <text class="trend-small">同城速递</text>
-          <text class="trend-copy">乌鲁木齐、伊宁、喀什等同城内容会保留独立筛选，推荐结果基于真实数据刷新。</text>
         </view>
       </view>
 
@@ -98,7 +97,7 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <CachedImage :src="item.authorAvatar" container-class="author-avatar-shell" image-class="author-avatar" />
+                  <CachedImage :src="displayAuthorAvatar(item)" container-class="author-avatar-shell" image-class="author-avatar" />
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.category }}</text>
@@ -140,7 +139,7 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <CachedImage :src="item.authorAvatar" container-class="author-avatar-shell" image-class="author-avatar" />
+                  <CachedImage :src="displayAuthorAvatar(item)" container-class="author-avatar-shell" image-class="author-avatar" />
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.publishDate }}</text>
@@ -189,6 +188,27 @@
       </view>
     </view>
 
+    <view v-if="showSortPanel" class="category-mask" @tap="toggleSortPanel">
+      <view class="sort-panel" @tap.stop>
+        <view class="panel-head">
+          <text class="panel-title">排序方式</text>
+          <view class="panel-close" @tap="toggleSortPanel">×</view>
+        </view>
+        <view class="sort-list">
+          <view
+            v-for="option in sortOptions"
+            :key="option.value"
+            class="sort-item"
+            :class="{ active: sortMode === option.value }"
+            @tap="selectSort(option.value)"
+          >
+            <text class="sort-label">{{ option.label }}</text>
+            <text class="sort-desc">{{ option.description }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <view class="fab" @tap="publishGuide">
       <text class="fab-icon">+</text>
       <text class="fab-label">发布</text>
@@ -210,15 +230,24 @@ import { getGuideFeed } from '../../services/guides'
 const primaryTabs = ['关注', '发现', '同城']
 const allSubTabs = ['推荐', '自驾', '美食', '安全', '徒步', '住宿']
 const visibleSubTabs = allSubTabs.slice(0, 5)
+const sortOptions = [
+  { value: 'recommended', label: '推荐排序', description: '保持当前推荐流顺序' },
+  { value: 'latest', label: '最新发布', description: '优先查看最近更新的攻略' },
+  { value: 'hot', label: '热度优先', description: '按点赞、收藏和评论综合排序' },
+]
 
 const activePrimaryTab = ref('发现')
 const activeSubTab = ref('推荐')
 const guides = ref([])
 const showCategoryPanel = ref(false)
+const showSearchBar = ref(false)
+const showSortPanel = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const detectedCity = ref('')
 const cityLoading = ref(false)
+const searchQuery = ref('')
+const sortMode = ref('recommended')
 
 const systemInfo = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync() : {}
 const statusBarHeight = systemInfo.statusBarHeight || 20
@@ -228,7 +257,8 @@ const currentUser = computed(() => getStoredAuthUser() || null)
 const isLoggedIn = computed(() => Boolean(getStoredAuthToken() && currentUser.value))
 
 const filteredGuides = computed(() => {
-  return guides.value.filter((item) => {
+  const keyword = normalizeSearchText(searchQuery.value)
+  const matched = guides.value.filter((item) => {
     const primaryMatched = activePrimaryTab.value === '同城'
       ? isSameCityGuide(item)
       : true
@@ -238,49 +268,17 @@ const filteredGuides = computed(() => {
     }
 
     if (activeSubTab.value === '推荐') {
-      return true
+      return matchesGuideSearch(item, keyword)
     }
 
-    return item.subCategory === activeSubTab.value
+    return item.subCategory === activeSubTab.value && matchesGuideSearch(item, keyword)
   })
+
+  return sortGuides(matched, sortMode.value)
 })
 
 const feedBadgeCount = computed(() => {
   return guides.value.reduce((total, item) => total + (item.badgeCount || 0), 0)
-})
-
-const feedSummary = computed(() => {
-  const total = filteredGuides.value.length
-  if (activePrimaryTab.value === '关注' && !isLoggedIn.value) {
-    return '登录后即可查看已关注作者的最新攻略，并让推荐流优先展示他们的更新。'
-  }
-
-  if (loading.value) {
-    return '正在同步后台攻略流和推荐排序。'
-  }
-
-  if (activePrimaryTab.value === '同城' && cityLoading.value) {
-    return '正在定位你所在的城市，同城内容会按当前位置筛选。'
-  }
-
-  if (errorMessage.value) {
-    return '连接攻略服务失败，重新加载后会继续请求真实内容流。'
-  }
-
-  if (!total) {
-    return activePrimaryTab.value === '关注'
-      ? '你关注的作者暂时还没有发布符合当前分类的攻略。'
-      : '当前分类还没有可展示的真实攻略内容。'
-  }
-  if (activePrimaryTab.value === '关注') {
-    return `当前展示 ${total} 条关注作者攻略，按发布时间和作者关系优先展示。`
-  }
-  if (activePrimaryTab.value === '同城') {
-    return detectedCity.value
-      ? `当前展示 ${total} 条 ${detectedCity.value} 同城攻略。`
-      : `当前展示 ${total} 条同城攻略，定位成功后会自动收敛到你所在城市。`
-  }
-  return `当前展示 ${total} 条真实攻略，推荐排序会优先考虑你已关注作者的新内容。`
 })
 
 const emptyTitle = computed(() => {
@@ -293,7 +291,14 @@ const emptyTitle = computed(() => {
   }
 
   if (activePrimaryTab.value === '同城') {
+    if (searchQuery.value) {
+      return `没有找到与“${searchQuery.value}”相关的同城攻略`
+    }
     return detectedCity.value ? `${detectedCity.value} 暂时还没有内容` : '定位后查看同城流'
+  }
+
+  if (searchQuery.value) {
+    return `没有找到与“${searchQuery.value}”相关的攻略`
   }
 
   return '这个分类暂时还没有内容'
@@ -309,9 +314,16 @@ const emptyDescription = computed(() => {
   }
 
   if (activePrimaryTab.value === '同城') {
+    if (searchQuery.value) {
+      return '试试换个作者名、标题关键词，或者切换分类后再搜。'
+    }
     return detectedCity.value
       ? `暂时还没有来自 ${detectedCity.value} 的攻略，稍后再刷新看看。`
       : '允许定位后，这里会自动显示你当前城市的攻略，比如人在乌鲁木齐就看乌鲁木齐。'
+  }
+
+  if (searchQuery.value) {
+    return '可以搜索作者昵称、攻略标题、摘要里的关键词，或者切换排序方式看看。'
   }
 
   return '可以切换分类看看，或者稍后重新刷新真实攻略流。'
@@ -358,7 +370,32 @@ function setSubTab(tab) {
 }
 
 function toggleCategoryPanel() {
+  showSortPanel.value = false
   showCategoryPanel.value = !showCategoryPanel.value
+}
+
+function toggleSearchBar() {
+  showCategoryPanel.value = false
+  showSortPanel.value = false
+  showSearchBar.value = !showSearchBar.value
+  if (!showSearchBar.value) {
+    clearSearch()
+  }
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+}
+
+function toggleSortPanel() {
+  showCategoryPanel.value = false
+  showSearchBar.value = false
+  showSortPanel.value = !showSortPanel.value
+}
+
+function selectSort(value) {
+  sortMode.value = value
+  showSortPanel.value = false
 }
 
 function selectCategory(tab) {
@@ -390,6 +427,65 @@ function noteSummary(item) {
   return item?.summaryText || item?.excerpt || (Array.isArray(item?.highlights) ? item.highlights.map((tag) => `#${tag}`).join(' ') : '') || '发布了一条新的新疆旅行笔记。'
 }
 
+function displayAuthorAvatar(item) {
+  if (item?.authorId && currentUser.value?.id && item.authorId === currentUser.value.id) {
+    return currentUser.value?.avatar_url || currentUser.value?.avatar || item.authorAvatar || ''
+  }
+
+  return item?.authorAvatar || ''
+}
+
+function matchesGuideSearch(item, keyword) {
+  if (!keyword) {
+    return true
+  }
+
+  const haystack = [
+    item?.nickname,
+    item?.author,
+    item?.title,
+    item?.excerpt,
+    item?.summaryText,
+    item?.location,
+    item?.locationTag,
+    item?.category,
+    ...(Array.isArray(item?.highlights) ? item.highlights : []),
+  ]
+    .filter(Boolean)
+    .map(normalizeSearchText)
+
+  return haystack.some((text) => text.includes(keyword))
+}
+
+function normalizeSearchText(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function sortGuides(list, mode) {
+  const items = Array.isArray(list) ? [...list] : []
+  if (mode === 'latest') {
+    return items.sort((left, right) => getGuideTime(right) - getGuideTime(left))
+  }
+
+  if (mode === 'hot') {
+    return items.sort((left, right) => getGuideHotScore(right) - getGuideHotScore(left))
+  }
+
+  return items
+}
+
+function getGuideTime(item) {
+  const raw = item?.publishDate || item?.createdAt || ''
+  const stamp = Date.parse(raw)
+  return Number.isFinite(stamp) ? stamp : 0
+}
+
+function getGuideHotScore(item) {
+  return Number(item?.likesCount || 0) * 3
+    + Number(item?.saveCount || 0) * 2
+    + Number(item?.commentCount || 0) * 4
+}
+
 function formatCount(value) {
   const count = Number(value) || 0
   if (count >= 1000) {
@@ -402,6 +498,10 @@ function openGuide(id) {
   uni.navigateTo({
     url: `/pages/guide-detail/index?id=${encodeURIComponent(id)}`,
   })
+}
+
+function openAiAssistant() {
+  uni.navigateTo({ url: '/pages/ai-assistant/index' })
 }
 
 function publishGuide() {
@@ -561,6 +661,18 @@ function isSameCityGuide(item) {
   flex-shrink: 0;
 }
 
+.hero-action.active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.text-action {
+  font-size: 24rpx;
+}
+
+.chat-entry {
+  font-size: 30rpx;
+}
+
 .left-action {
   margin-right: 4rpx;
 }
@@ -618,28 +730,6 @@ function isSameCityGuide(item) {
   transform: translateX(-50%);
 }
 
-.hero-copy {
-  position: relative;
-  z-index: 1;
-  padding-top: 34rpx;
-}
-
-.hero-title {
-  display: block;
-  font-size: 52rpx;
-  font-weight: 700;
-  line-height: 1.18;
-}
-
-.hero-subtitle {
-  display: block;
-  max-width: 620rpx;
-  margin-top: 16rpx;
-  font-size: 24rpx;
-  line-height: 1.7;
-  opacity: 0.92;
-}
-
 .subnav-shell {
   display: flex;
   align-items: center;
@@ -647,6 +737,50 @@ function isSameCityGuide(item) {
   margin-top: -22rpx;
   position: relative;
   z-index: 2;
+}
+
+.search-shell {
+  position: relative;
+  z-index: 2;
+  margin-top: 18rpx;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  height: 82rpx;
+  padding: 0 20rpx;
+  border-radius: 26rpx;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16rpx 32rpx rgba(45, 24, 16, 0.08);
+}
+
+.search-icon,
+.search-clear {
+  flex-shrink: 0;
+  color: $theme-muted;
+  font-size: 24rpx;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  font-size: 24rpx;
+  color: $theme-text;
+}
+
+.search-placeholder {
+  color: #b39a82;
+}
+
+.search-hint {
+  display: block;
+  margin-top: 10rpx;
+  padding-left: 6rpx;
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .subnav-scroll {
@@ -696,61 +830,8 @@ function isSameCityGuide(item) {
   font-weight: 700;
 }
 
-.trend-strip {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 18rpx;
-  margin-top: 24rpx;
-}
-
-.trend-card {
-  min-height: 148rpx;
-  padding: 24rpx;
-  border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.84);
-  border: 2rpx solid rgba(212, 165, 116, 0.18);
-  box-shadow: 0 16rpx 36rpx rgba(45, 24, 16, 0.08);
-}
-
-.accent-card {
-  background: linear-gradient(180deg, rgba(255, 242, 226, 0.96), rgba(255, 255, 255, 0.82));
-}
-
-.trend-main {
-  display: flex;
-  align-items: center;
-  gap: 14rpx;
-  margin-bottom: 12rpx;
-}
-
-.trend-label,
-.trend-small {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8rpx 16rpx;
-  border-radius: 999rpx;
-  background: rgba(196, 69, 54, 0.1);
-  color: $theme-color;
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.trend-value {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: $theme-text;
-}
-
-.trend-copy {
-  display: block;
-  font-size: 23rpx;
-  line-height: 1.65;
-  color: $theme-muted;
-}
-
 .waterfall-shell {
-  margin-top: 26rpx;
+  margin-top: 20rpx;
 }
 
 .waterfall-grid {
@@ -962,7 +1043,8 @@ function isSameCityGuide(item) {
   padding: calc(120rpx + env(safe-area-inset-top)) 24rpx calc(40rpx + env(safe-area-inset-bottom));
 }
 
-.category-panel {
+.category-panel,
+.sort-panel {
   width: 100%;
   min-height: 520rpx;
   border-radius: 36rpx;
@@ -1025,6 +1107,43 @@ function isSameCityGuide(item) {
   margin-top: 30rpx;
 }
 
+.sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 30rpx;
+}
+
+.sort-item {
+  padding: 24rpx 22rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  border: 2rpx solid rgba(212, 165, 116, 0.18);
+}
+
+.sort-item.active {
+  background: linear-gradient(135deg, rgba(196, 69, 54, 0.12), rgba(226, 155, 82, 0.16));
+  border-color: rgba(196, 69, 54, 0.28);
+}
+
+.sort-label,
+.sort-desc {
+  display: block;
+}
+
+.sort-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.sort-desc {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: $theme-muted;
+}
+
 .category-item {
   height: 112rpx;
   border-radius: 28rpx;
@@ -1082,10 +1201,6 @@ function isSameCityGuide(item) {
 @media screen and (max-width: 360px) {
   .primary-tabs {
     gap: 22rpx;
-  }
-
-  .trend-strip {
-    grid-template-columns: 1fr;
   }
 }
 </style>

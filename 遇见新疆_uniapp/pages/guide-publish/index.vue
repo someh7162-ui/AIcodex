@@ -128,14 +128,29 @@
       <view class="form-card track-card">
         <view class="section-head">
           <text class="field-label no-gap">徒步轨迹</text>
-          <text class="section-tip">可选，把当前保存的徒步路线一起发出去</text>
+          <text class="section-tip">可选，把当前或已保存的徒步路线一起发出去</text>
         </view>
         <view v-if="hasAttachableTrack" class="track-body">
           <view class="track-copy">
-            <text class="track-title">附带最近一次徒步记录</text>
+            <text class="track-title">附带徒步记录</text>
             <text class="track-desc">{{ trackSummaryText }}</text>
           </view>
           <switch :checked="publishForm.attachHikingTrack" color="#ff7c62" @change="handleTrackSwitchChange" />
+        </view>
+        <view v-if="availableTracks.length" class="track-option-list">
+          <view
+            v-for="item in availableTracks"
+            :key="item.id"
+            class="track-option"
+            :class="{ active: publishForm.selectedTrackId === item.id }"
+            @tap="selectTrackOption(item.id)"
+          >
+            <view>
+              <text class="track-option-title">{{ item.title }}</text>
+              <text class="track-option-meta">{{ item.summary }}</text>
+            </view>
+            <text v-if="publishForm.selectedTrackId === item.id" class="track-option-check">已选</text>
+          </view>
         </view>
         <view v-else class="track-empty">
           <text class="track-empty-title">还没有可附带的轨迹</text>
@@ -186,7 +201,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onLoad } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
@@ -208,7 +223,7 @@ const locationOptionsLoading = ref(false)
 const locationOptions = ref([])
 const publishForm = reactive(createDefaultPublishForm())
 const hikingStore = useHikingStore()
-const { trackPoints, isTracking } = storeToRefs(hikingStore)
+const { trackPoints, isTracking, savedTracks } = storeToRefs(hikingStore)
 
 const systemInfo = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync() : {}
 const statusBarHeight = systemInfo.statusBarHeight || 20
@@ -259,12 +274,47 @@ const locationStatusClass = computed(() => ({
   warn: locationFailed.value,
 }))
 const normalizedTrackPoints = computed(() => Array.isArray(trackPoints.value) ? trackPoints.value.filter(Boolean) : [])
-const attachableTrack = computed(() => {
+const liveTrack = computed(() => {
   if (!normalizedTrackPoints.value.length) {
     return null
   }
 
-  return createGuideTrackPayload(normalizedTrackPoints.value)
+  return {
+    id: 'live-track',
+    title: isTracking.value ? '当前记录中轨迹' : '未结束的当前轨迹',
+    track: createGuideTrackPayload(normalizedTrackPoints.value),
+    isLive: true,
+  }
+})
+const availableTracks = computed(() => {
+  const items = []
+  if (liveTrack.value?.track) {
+    items.push({
+      id: liveTrack.value.id,
+      title: liveTrack.value.title,
+      summary: summarizeTrack(liveTrack.value.track, isTracking.value ? '记录中' : '未结束'),
+      track: liveTrack.value.track,
+    })
+  }
+
+  const normalizedSavedTracks = Array.isArray(savedTracks.value) ? savedTracks.value : []
+  normalizedSavedTracks.forEach((item) => {
+    if (!item?.points?.length) {
+      return
+    }
+    items.push({
+      id: item.id,
+      title: item.title || '已保存轨迹',
+      summary: summarizeTrack(item, '已保存'),
+      track: item,
+    })
+  })
+
+  return items
+})
+const attachableTrack = computed(() => {
+  const selected = availableTracks.value.find((item) => item.id === publishForm.selectedTrackId)
+  return selected?.track || availableTracks.value[0]?.track || null
 })
 const hasAttachableTrack = computed(() => Boolean(attachableTrack.value?.points?.length))
 const trackSummaryText = computed(() => {
@@ -273,11 +323,8 @@ const trackSummaryText = computed(() => {
     return '暂无可附带轨迹'
   }
 
-  const distanceKm = Number(track.distanceKm || sumTrackDistanceKm(track.points) || 0)
-  const pointCount = Number(track.pointCount || track.points.length || 0)
-  const durationText = formatTrackDuration(track.durationMs)
-  const trackingState = isTracking.value ? '记录中' : '已保存'
-  return `${trackingState} · ${distanceKm.toFixed(2)} km · ${durationText} · ${pointCount} 个轨迹点`
+  const selected = availableTracks.value.find((item) => item.id === publishForm.selectedTrackId)
+  return selected?.summary || summarizeTrack(track, '已保存')
 })
 
 onLoad(() => {
@@ -294,14 +341,19 @@ onLoad(() => {
   }
 
   hikingStore.hydrate()
-  if (!hasAttachableTrack.value) {
-    publishForm.attachHikingTrack = false
-  }
+  syncTrackSelection()
   loadCurrentLocation()
   setTimeout(() => {
     autoFocusTitle.value = true
   }, 50)
 })
+
+watch(
+  () => availableTracks.value.map((item) => item.id).join('|'),
+  () => {
+    syncTrackSelection()
+  }
+)
 
 function createDefaultPublishForm() {
   return {
@@ -315,11 +367,37 @@ function createDefaultPublishForm() {
     video: '',
     videoPoster: '',
     attachHikingTrack: false,
+    selectedTrackId: '',
   }
 }
 
 function handleTrackSwitchChange(event) {
   publishForm.attachHikingTrack = Boolean(event?.detail?.value)
+  if (publishForm.attachHikingTrack && !publishForm.selectedTrackId) {
+    syncTrackSelection()
+  }
+}
+
+function selectTrackOption(trackId) {
+  publishForm.selectedTrackId = String(trackId || '')
+  publishForm.attachHikingTrack = true
+}
+
+function syncTrackSelection() {
+  const firstTrackId = availableTracks.value[0]?.id || ''
+  if (!availableTracks.value.some((item) => item.id === publishForm.selectedTrackId)) {
+    publishForm.selectedTrackId = firstTrackId
+  }
+  if (!firstTrackId) {
+    publishForm.attachHikingTrack = false
+  }
+}
+
+function summarizeTrack(track, stateLabel) {
+  const distanceKm = Number(track.distanceKm || sumTrackDistanceKm(track.points) || 0)
+  const pointCount = Number(track.pointCount || track.points?.length || 0)
+  const durationText = formatTrackDuration(track.durationMs)
+  return `${stateLabel} · ${distanceKm.toFixed(2)} km · ${durationText} · ${pointCount} 个轨迹点`
 }
 
 async function loadCurrentLocation() {
@@ -1018,6 +1096,55 @@ function validatePublishedGuide() {
 
 .track-empty {
   padding: 4rpx 0;
+}
+
+.track-option-list {
+  margin-top: 18rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.track-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 22rpx;
+  background: #fff7f3;
+  border: 2rpx solid rgba(223, 92, 70, 0.08);
+}
+
+.track-option.active {
+  border-color: rgba(223, 92, 70, 0.35);
+  background: #fff1ec;
+}
+
+.track-option-title,
+.track-option-meta,
+.track-option-check {
+  display: block;
+}
+
+.track-option-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.track-option-meta {
+  margin-top: 6rpx;
+  font-size: 21rpx;
+  line-height: 1.6;
+  color: $theme-muted;
+}
+
+.track-option-check {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #df5c46;
 }
 
 .location-picker-mask {
