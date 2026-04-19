@@ -6,7 +6,9 @@
   "scripts": {
     "api": "node server/index.js",
     "migrate:guide-notes": "node server/migrate-guide-notes.js",
-    "sync:destinations": "node server/sync-destinations.js"
+    "sync:destinations": "node server/sync-destinations.js",
+    "download:destination-images": "node server/download-destination-images.js",
+    "bundle:baike-destination-images": "python server/bundle-baike-destination-images.py"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

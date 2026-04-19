@@ -51,6 +51,16 @@
         <text class="label">守护模式</text>
       </view>
     </view>
+
+    <view class="secondary-actions">
+      <view
+        class="secondary-btn"
+        :class="{ disabled: !hasTrackPoints && !isTracking }"
+        @tap="handleClearTrack"
+      >
+        清空当前轨迹
+      </view>
+    </view>
   </view>
 </template>
 
@@ -59,6 +69,10 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   isTracking: {
+    type: Boolean,
+    default: false,
+  },
+  hasTrackPoints: {
     type: Boolean,
     default: false,
   },
@@ -76,7 +90,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message', 'finish-track'])
+const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message', 'finish-track', 'clear-track'])
 
 const SHORT_ON_MS = 250
 const LONG_ON_MS = 750
@@ -116,6 +130,14 @@ function handleFinishLongPress() {
     return
   }
   emit('finish-track')
+}
+
+function handleClearTrack() {
+  if (!props.hasTrackPoints && !props.isTracking) {
+    return
+  }
+
+  emit('clear-track')
 }
 
 async function toggleSosFlash() {
@@ -410,6 +432,27 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+}
+
+.secondary-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24rpx;
+}
+
+.secondary-btn {
+  min-width: 240rpx;
+  padding: 16rpx 28rpx;
+  border-radius: 999rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.secondary-btn.disabled {
+  opacity: 0.42;
 }
 
 .main-action {

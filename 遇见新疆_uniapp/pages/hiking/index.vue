@@ -10,7 +10,6 @@
       :accuracy-text="accuracyText"
       :is-offline="isOffline"
       :mode-text="headerModeText"
-      :debug-text="debugText"
       :sunset-countdown-text="sunsetCountdownText"
       :sunset-time-text="sunsetTimeText"
       :sunset-risk-level="sunsetRiskLevel"
@@ -32,12 +31,14 @@
 
     <HikingBottomControls
       :is-tracking="isTracking"
+      :has-track-points="Boolean(trackPoints.length)"
       :is-guard-mode="isGuardMode"
       :emergency-contact-name="emergencyContactName"
       :emergency-contact-phones="emergencyContactPhones"
       @sos-message="handleEmergencySms"
       @toggle-track="handleStart"
       @finish-track="handleFinishTrack"
+      @clear-track="handleClearTrack"
       @toggle-guard="toggleGuard"
     />
   </view>
@@ -80,7 +81,6 @@ const isGuardMode = ref(false)
 const mapScale = ref(15)
 const currentMapMode = ref(MAP_MODES[0].key)
 const networkOnline = ref(true)
-const debugLogs = ref([])
 const nowTick = ref(Date.now())
 const lastGuardPromptAt = ref(0)
 const guardCooldownUntil = ref(0)
@@ -120,7 +120,6 @@ const isOffline = computed(() => !networkOnline.value)
 const distanceText = computed(() => sumTrackDistanceKm(trackPoints.value).toFixed(2))
 const mapModeLabel = computed(() => MAP_MODES.find((item) => item.key === currentMapMode.value)?.label || '标准地图')
 const headerModeText = computed(() => `${isOffline.value ? '离线' : '在线'} · ${mapModeLabel.value}`)
-const debugText = computed(() => debugLogs.value.join(' | '))
 const sunsetInfo = computed(() => getSunsetInfo(currentLocation.value, new Date(nowTick.value)))
 const sunsetCountdownText = computed(() => sunsetInfo.value?.countdownText || '')
 const sunsetTimeText = computed(() => formatSunsetTime(sunsetInfo.value?.sunsetAt))
@@ -281,15 +280,12 @@ function bindNetworkState() {
 
 async function refreshLocation() {
   try {
-    appendDebugLog(`开始定位: offline=${isOffline.value ? '1' : '0'}, tracking=${isTracking.value ? '1' : '0'}`)
     const location = await hikingStore.refreshLocation({
       preferGpsWhenOffline: isOffline.value,
       appendWhenTracking: isTracking.value,
     })
-    appendDebugLog(`定位返回: ${formatLocationDebug(location)}`)
   } catch (error) {
     locationError.value = error?.message || '定位失败'
-    appendDebugLog(`定位失败: ${locationError.value}`)
     maybePromptLocationSettings(locationError.value)
   }
 }
@@ -345,6 +341,44 @@ async function handleFinishTrack() {
       } catch (error) {
         uni.showToast({
           title: error?.message || '结束保存失败',
+          icon: 'none',
+          duration: 2500,
+        })
+      }
+    },
+  })
+}
+
+function handleClearTrack() {
+  if (!trackPoints.value.length && !isTracking.value) {
+    uni.showToast({
+      title: '当前没有可清空的轨迹',
+      icon: 'none',
+    })
+    return
+  }
+
+  uni.showModal({
+    title: '清空当前轨迹',
+    content: isTracking.value
+      ? '清空后会停止本次记录，未保存的轨迹里程将被清除。'
+      : '会清除当前未保存的轨迹和里程显示，已保存轨迹不受影响。',
+    confirmText: '清空',
+    cancelText: '取消',
+    success: async ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+
+      try {
+        await hikingStore.clearCurrentTrack()
+        uni.showToast({
+          title: '当前轨迹已清空',
+          icon: 'none',
+        })
+      } catch (error) {
+        uni.showToast({
+          title: error?.message || '清空失败',
           icon: 'none',
           duration: 2500,
         })
@@ -489,11 +523,6 @@ function acknowledgeGuardSafe(cooldownMinutes = 20) {
   guardCooldownUntil.value = currentTime + cooldownMinutes * 60000
 }
 
-function appendDebugLog(message) {
-  const stamp = new Date().toTimeString().slice(0, 8)
-  debugLogs.value = [`${stamp} ${message}`, ...debugLogs.value].slice(0, 4)
-}
-
 function maybePromptLocationSettings(message) {
   if (hasPromptedLocationSettings || !/定位权限未开启/.test(String(message || ''))) {
     return
@@ -570,37 +599,6 @@ function showSunsetWarning(level, minutes) {
   }
 }
 
-function formatLocationDebug(location) {
-  if (!location) {
-    return 'empty'
-  }
-
-  const latitude = Number(location.latitude)
-  const longitude = Number(location.longitude)
-  const provider = location.provider || 'unknown'
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return `${provider} invalid`
-  }
-
-  const accuracy = Number(location.accuracy || 0)
-  const altitude = Number(location.altitude || 0)
-  const parts = [
-    provider,
-    `${latitude.toFixed(5)},${longitude.toFixed(5)}`,
-    `acc=${Number.isFinite(accuracy) ? accuracy.toFixed(0) : '--'}`,
-  ]
-
-  if (Number.isFinite(altitude) && altitude > 0) {
-    parts.push(`alt=${altitude.toFixed(0)}`)
-  }
-
-  if (location.coordinateSystem) {
-    parts.push(String(location.coordinateSystem))
-  }
-
-  return parts.join(' ')
-}
-
 function buildEmergencySmsBody(location) {
   const latitude = Number(location?.latitude)
   const longitude = Number(location?.longitude)
@@ -613,7 +611,7 @@ function buildEmergencySmsBody(location) {
   const emergencyText = hikingModeMock.emergency?.smsText || '我正在徒步中，可能遇到危险，请尽快联系我。'
 
   return [
-    '【云起天山 徒步 SOS】',
+    '【丝路疆寻 徒步 SOS】',
     emergencyText,
     `坐标：${coordText}`,
     `海拔：${altitudeValue}`,

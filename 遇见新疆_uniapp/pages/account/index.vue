@@ -92,8 +92,8 @@
       </view>
 
       <view class="section app-info">
-        <text class="muted-text">云起天山 v1.0.0</text>
-        <text class="muted-text">© 2026 云起天山，保留所有权利</text>
+        <text class="muted-text">丝路疆寻 v1.0.0</text>
+        <text class="muted-text">© 2026 丝路疆寻，保留所有权利</text>
       </view>
       <view class="bottom-space"></view>
     </view>

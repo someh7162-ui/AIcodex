@@ -226,6 +226,18 @@ export const useHikingStore = defineStore('hiking', () => {
     return savedTrack
   }
 
+  async function clearCurrentTrack() {
+    hydrate()
+
+    if (isTracking.value) {
+      await stopTracking()
+    }
+
+    trackPoints.value = []
+    locationError.value = ''
+    persistSession()
+  }
+
   function clearSavedTrack(trackId) {
     savedTracks.value = savedTracks.value.filter((item) => item.id !== trackId)
     persistSession()
@@ -357,6 +369,7 @@ export const useHikingStore = defineStore('hiking', () => {
     startTracking,
     stopTracking,
     finishTracking,
+    clearCurrentTrack,
     clearSavedTrack,
   }
 })

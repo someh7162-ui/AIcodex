@@ -31,6 +31,23 @@ function hasContentApi() {
   return hasApiBaseUrl()
 }
 
+function mergeDestinationWithLocal(item) {
+  if (!item) {
+    return item
+  }
+
+  const local = getLocalDestinationById(item.id)
+  if (!local) {
+    return item
+  }
+
+  return {
+    ...local,
+    ...item,
+    image: local.image || item.image || '',
+  }
+}
+
 export function getLocalDestinationList() {
   return destinationList
 }
@@ -67,7 +84,7 @@ export async function getDestinationFeed(params = {}) {
 
   try {
     const data = await request(`${API_BASE_URL}/destinations`, params)
-    return Array.isArray(data?.list) ? data.list : destinationList
+    return Array.isArray(data?.list) ? data.list.map(mergeDestinationWithLocal) : destinationList
   } catch (error) {
     return destinationList
   }
@@ -80,7 +97,7 @@ export async function getDestinationDetail(id) {
 
   try {
     const data = await request(`${API_BASE_URL}/destinations/${encodeURIComponent(id)}`)
-    return data?.data || getLocalDestinationById(id)
+    return mergeDestinationWithLocal(data?.data) || getLocalDestinationById(id)
   } catch (error) {
     return getLocalDestinationById(id)
   }

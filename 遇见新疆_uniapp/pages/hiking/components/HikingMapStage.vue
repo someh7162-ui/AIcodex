@@ -2,19 +2,28 @@
   <view class="map-container">
     <!-- #ifdef H5 -->
     <H5AmapTiandituMap
-      v-if="storeHasMapLocation && hasAmapKey()"
+      v-if="h5MapReady"
       class="live-map"
-      :map-center="storeMapCenter"
+      :map-center="amapMapCenter"
       :map-scale="mapScale"
-      :map-polyline="storeMapPolyline"
-      :map-markers="storeMapMarkers"
+      :map-polyline="amapMapPolyline"
+      :map-markers="amapMapMarkers"
       :map-mode-key="mapModeKey"
     />
     <!-- #endif -->
 
     <!-- #ifdef APP-PLUS -->
+    <AppAmapWebview
+      v-if="appOnlineMapReady"
+      class="live-map"
+      :map-center="amapMapCenter"
+      :map-scale="mapScale"
+      :map-polyline="amapMapPolyline"
+      :map-markers="amapMapMarkers"
+      :map-mode-key="mapModeKey"
+    />
     <HikingTileMapCompat
-      v-if="storeHasMapLocation && hasMapSupport()"
+      v-else-if="appOfflineMapReady"
       class="live-map"
       :map-center="storeMapCenter"
       :map-scale="mapScale"
@@ -24,7 +33,7 @@
     />
     <!-- #endif -->
 
-    <view v-else class="map-placeholder">
+    <view v-if="showMapPlaceholder" class="map-placeholder">
       <view class="map-fallback-copy">
         <text class="fallback-title">等待定位中</text>
         <text class="fallback-desc">已接入原生 GPS 定位与徒步地图桥接，获取到位置后会显示真实地图与轨迹。</text>
@@ -58,17 +67,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 // #ifdef H5
 import H5AmapTiandituMap from './H5AmapTiandituMap.vue'
 // #endif
 // #ifdef APP-PLUS
+import AppAmapWebview from './AppAmapWebview.vue'
 import HikingTileMapCompat from './HikingTileMapCompat.vue'
 // #endif
 import { storeToRefs } from 'pinia'
+import { wgs84ToGcj02 } from '../../../common/coord-transform'
 import { hasAmapKey } from '../../../config/amap'
 import { useHikingStore } from '../../../stores/useHikingStore'
 
-defineProps({
+const props = defineProps({
   mapScale: {
     type: Number,
     default: 15,
@@ -98,12 +110,89 @@ const {
   mapMarkers: storeMapMarkers,
 } = storeToRefs(hikingStore)
 
-function hasMapSupport() {
+const amapMapCenter = computed(() => convertPointToAmap(storeMapCenter.value))
+const amapMapPolyline = computed(() => convertPolylineToAmap(storeMapPolyline.value))
+const amapMapMarkers = computed(() => convertMarkersToAmap(storeMapMarkers.value))
+const h5MapReady = computed(() => storeHasMapLocation.value && hasAmapKey())
+const appOnlineMapReady = computed(() => {
+  return storeHasMapLocation.value && !props.isOffline && hasAmapKey() && hasAppMapSupport()
+})
+const appOfflineMapReady = computed(() => storeHasMapLocation.value && hasOfflineMapSupport())
+const showMapPlaceholder = computed(() => !storeHasMapLocation.value || !hasRenderableMap())
+
+function hasAppMapSupport() {
   // #ifdef APP-PLUS
-  return true
+  return typeof plus !== 'undefined' && Boolean(plus.webview)
   // #endif
 
-  return hasAmapKey()
+  return false
+}
+
+function hasOfflineMapSupport() {
+  return true
+}
+
+function hasRenderableMap() {
+  // #ifdef H5
+  return h5MapReady.value
+  // #endif
+
+  // #ifdef APP-PLUS
+  return appOnlineMapReady.value || appOfflineMapReady.value
+  // #endif
+
+  return false
+}
+
+function convertPointToAmap(point) {
+  const latitude = Number(point?.latitude)
+  const longitude = Number(point?.longitude)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null
+  }
+
+  const converted = wgs84ToGcj02(longitude, latitude)
+  if (!converted) {
+    return null
+  }
+
+  return {
+    ...point,
+    longitude: converted.longitude,
+    latitude: converted.latitude,
+  }
+}
+
+function convertPolylineToAmap(lines) {
+  if (!Array.isArray(lines)) {
+    return []
+  }
+
+  return lines
+    .map((line) => ({
+      ...line,
+      points: Array.isArray(line?.points)
+        ? line.points.map((point) => convertPointToAmap(point)).filter(Boolean)
+        : [],
+    }))
+    .filter((line) => line.points.length)
+}
+
+function convertMarkersToAmap(markers) {
+  if (!Array.isArray(markers)) {
+    return []
+  }
+
+  return markers.map((marker) => {
+    const converted = convertPointToAmap(marker)
+    return converted
+      ? {
+          ...marker,
+          longitude: converted.longitude,
+          latitude: converted.latitude,
+        }
+      : null
+  }).filter(Boolean)
 }
 </script>
 

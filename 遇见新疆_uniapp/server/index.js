@@ -307,7 +307,7 @@ function mapDestination(row) {
       latitude: Number(row.latitude),
     },
     description: row.description,
-    image: row.image_url || '',
+    image: buildAssetUrl(req, row.image_url || ''),
     weather: row.weather || {},
     tips: toTextArray(row.tips),
     suggestion: row.suggestion || '',

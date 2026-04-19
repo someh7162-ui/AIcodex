@@ -251,7 +251,7 @@ function normalizeLocationError(error) {
   const raw = JSON.stringify(error)
 
   if (/auth deny|permission|authorize|获取定位权限失败|code=1501|code=PERMISSION_DENIED/i.test(text + raw)) {
-    return '定位权限未开启，请在系统设置中允许“云起天山”访问位置信息'
+    return '定位权限未开启，请在系统设置中允许“丝路疆寻”访问位置信息'
   }
 
   if (/service disabled|LOCATION_SWITCH_OFF|gps|定位服务|系统定位服务未开启/i.test(text + raw)) {
@@ -305,7 +305,7 @@ function ensureLocationPermission() {
         }
 
         if (deniedAlways.length || deniedPresent.length) {
-          reject(new Error('定位权限未开启，请在系统设置中允许“云起天山”访问位置信息'))
+          reject(new Error('定位权限未开启，请在系统设置中允许“丝路疆寻”访问位置信息'))
           return
         }
 

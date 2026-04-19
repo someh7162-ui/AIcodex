@@ -6,6 +6,7 @@
 
 <script setup>
 import { getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { AMAP_WEB_KEY, hasAmapKey } from '../../../config/amap'
 
 const props = defineProps({
   mapCenter: {
@@ -23,6 +24,10 @@ const props = defineProps({
   mapMarkers: {
     type: Array,
     default: () => [],
+  },
+  mapModeKey: {
+    type: String,
+    default: 'satellite',
   },
 })
 
@@ -60,6 +65,14 @@ watch(() => props.mapScale, () => {
 watch(() => props.mapPolyline, () => {
   syncMapState()
 }, { deep: true })
+
+watch(() => props.mapMarkers, () => {
+  syncMapState()
+}, { deep: true })
+
+watch(() => props.mapModeKey, () => {
+  syncMapState()
+})
 
 onBeforeUnmount(() => {
   logAppMap('component before unmount')
@@ -140,14 +153,21 @@ async function initChildWebview() {
 }
 
 function resolveLocalMapUrl() {
+  const query = []
+  if (hasAmapKey()) {
+    query.push(`key=${encodeURIComponent(AMAP_WEB_KEY)}`)
+  }
+  query.push(`mode=${encodeURIComponent(String(props.mapModeKey || 'satellite'))}`)
+  const suffix = query.length ? `?${query.join('&')}` : ''
+
   if (typeof plus === 'undefined' || !plus.io || typeof plus.io.convertLocalFileSystemURL !== 'function') {
     logAppMap('convertLocalFileSystemURL unavailable, fallback raw path')
-    return '_www/static/hiking-amap.html'
+    return `_www/static/hiking-amap.html${suffix}`
   }
 
   const absolutePath = plus.io.convertLocalFileSystemURL('_www/static/hiking-amap.html')
   logAppMap('resolved local map path', absolutePath)
-  return absolutePath || '_www/static/hiking-amap.html'
+  return `${absolutePath || '_www/static/hiking-amap.html'}${suffix}`
 }
 
 function scheduleInitRetry(rect) {
@@ -221,6 +241,8 @@ function syncMapState() {
     longitude: Number(props.mapCenter?.longitude || 0),
     latitude: Number(props.mapCenter?.latitude || 0),
     zoom: Math.max(8, Math.min(18, Math.round(Number(props.mapScale || 16)))),
+    mode: String(props.mapModeKey || 'satellite'),
+    markers: extractMarkerPoints(props.mapMarkers),
     track: extractTrackPoints(props.mapPolyline),
   }
 
@@ -237,6 +259,18 @@ function extractTrackPoints(polyline) {
       latitude: Number(item.latitude),
     }))
     .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude))
+}
+
+function extractMarkerPoints(markers) {
+  return Array.isArray(markers)
+    ? markers
+      .map((item) => ({
+        longitude: Number(item.longitude),
+        latitude: Number(item.latitude),
+        label: item?.callout?.content || '',
+      }))
+      .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude))
+    : []
 }
 </script>
 

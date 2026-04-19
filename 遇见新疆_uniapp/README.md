@@ -1,4 +1,4 @@
-# 云起天山 uni-app 项目
+# 丝路疆寻 uni-app 项目
 
 这是从原始 React/Vite UI 迁移出来的 uni-app 安卓项目，可直接用 HBuilderX 打开。
 

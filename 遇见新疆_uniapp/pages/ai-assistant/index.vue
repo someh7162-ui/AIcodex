@@ -1,18 +1,16 @@
 <template>
   <view class="page-shell assistant-page">
     <view class="page-scroll">
-        <view class="hero-gradient assistant-banner">
-          <view class="hero-inner section">
-            <view class="private-tools">
-            <input v-model="apiKeyInput" password class="mini-key-input" />
-            <view class="mini-action" @tap="saveApiKeyToStorage">存</view>
-            <view class="mini-action dark" :class="{ disabled: testing }" @tap="runConnectionTest">
-              {{ testing ? '...' : '测' }}
-            </view>
-          </view>
-
+      <view class="hero-gradient assistant-banner">
+        <view class="hero-inner section">
           <view class="hero-copy">
-            <text class="banner-title">灵鹿</text>
+            <view class="assistant-hero-row">
+              <image class="assistant-avatar hero-avatar" :src="assistantAvatar" mode="aspectFill"></image>
+              <view class="assistant-hero-text">
+                <text class="banner-title">灵鹿</text>
+                <text class="banner-subtitle">像聊天软件一样和你的新疆旅行搭子随时对话</text>
+              </view>
+            </view>
           </view>
 
           <view class="hero-status">
@@ -34,14 +32,6 @@
             <view class="primary-action" @tap="sendIncomingPrompt">让 AI 生成建议</view>
             <view class="secondary-action" @tap="fillIncomingPrompt">填入输入框</view>
           </view>
-        </view>
-      </view>
-
-      <view v-if="testResult" class="section test-shell">
-        <view class="test-card" :class="{ failed: !testResult.ok }">
-          <text class="test-title">{{ testResult.ok ? '连接测试成功' : '连接测试失败' }}</text>
-          <text class="test-desc">{{ testResult.message }}</text>
-          <text v-if="testResult.meta" class="test-meta muted-text">{{ testResult.meta }}</text>
         </view>
       </view>
 
@@ -67,7 +57,7 @@
         <view class="dialogue-head">
           <view class="dialogue-state" :class="{ active: sending }">
             <text class="dialogue-state-dot"></text>
-            <text>{{ sending ? '生成中' : `${messages.length} 条记录` }}</text>
+            <text>{{ dialogueStateText }}</text>
           </view>
         </view>
 
@@ -78,6 +68,7 @@
         <view class="dialogue-surface">
           <view v-if="!messages.length" class="empty-card">
             <view class="message-row assistant intro-row">
+              <image class="message-avatar assistant-avatar bubble-avatar" :src="assistantAvatar" mode="aspectFill"></image>
               <view class="message-bubble assistant-bubble intro-bubble">
                 <text class="message-role">灵鹿</text>
                 <text class="message-content intro-content">HI！我是灵鹿，有关于西域旅游的问题都可以问我哦！</text>
@@ -92,9 +83,24 @@
               class="message-row"
               :class="{ mine: item.role === 'user', assistant: item.role === 'assistant' }"
             >
+              <image v-if="item.role === 'assistant'" class="message-avatar assistant-avatar bubble-avatar" :src="assistantAvatar" mode="aspectFill"></image>
               <view class="message-bubble" :class="item.role === 'user' ? 'user-bubble' : 'assistant-bubble'">
                 <text class="message-role">{{ item.role === 'user' ? '我' : '灵鹿' }}</text>
                 <text v-if="item.role === 'user'" class="message-content user-content">{{ item.content }}</text>
+                <view v-else-if="isAssistantStreaming(item)" class="assistant-streaming">
+                  <view v-if="getRenderableMessageContent(item)" class="streaming-content">
+                    <text class="message-content assistant-content plain-content">{{ getRenderableMessageContent(item) }}</text>
+                    <text class="stream-cursor">▍</text>
+                  </view>
+                  <view v-else class="streaming-waiting">
+                    <text class="waiting-text">灵鹿正在整理回答</text>
+                    <view class="waiting-dots">
+                      <text class="waiting-dot"></text>
+                      <text class="waiting-dot"></text>
+                      <text class="waiting-dot"></text>
+                    </view>
+                  </view>
+                </view>
                 <view v-else class="assistant-markdown">
                   <block v-for="(block, blockIndex) in getMessageBlocks(item)" :key="`${item.id}-${blockIndex}`">
                     <text
@@ -146,12 +152,19 @@
                   </block>
                 </view>
               </view>
+              <image
+                v-if="item.role === 'user'"
+                class="message-avatar user-avatar bubble-avatar"
+                :src="userAvatar"
+                mode="aspectFill"
+              ></image>
             </view>
           </view>
 
-          <view v-if="sending" class="typing-row">
+          <view v-if="awaitingReply && !hasStreamingAssistant" class="typing-row">
+            <image class="message-avatar assistant-avatar bubble-avatar" :src="assistantAvatar" mode="aspectFill"></image>
             <view class="typing-card">
-              <text class="typing-text">AI 正在整理建议...</text>
+              <text class="typing-text">灵鹿正在整理建议...</text>
             </view>
           </view>
 
@@ -164,44 +177,45 @@
     </view>
 
     <view class="composer-wrap">
-      <view class="composer card">
-        <textarea
-          v-model="draft"
-          class="composer-input"
-          auto-height
-          maxlength="800"
-          placeholder="输入你想问灵鹿的问题，例如：新疆 7 天怎么安排？"
-        />
-        <view class="composer-foot">
-          <text class="muted-text composer-hint">{{ hasApiKey ? '已连接灵鹿' : '请先填写内部 Key' }}</text>
-          <view class="send-btn" :class="{ disabled: !canSend }" @tap="sendDraft">发送</view>
+      <view class="composer-bar">
+        <view class="composer-input-shell">
+          <textarea
+            v-model="draft"
+            class="composer-input"
+            auto-height
+            maxlength="800"
+            placeholder="输入你想问灵鹿的问题，例如：新疆 7 天怎么安排？"
+          />
+          <view class="composer-foot">
+            <view class="composer-status-pill" :class="{ offline: !hasApiKey }">
+              <text class="composer-status-dot"></text>
+              <text class="composer-hint">{{ hasApiKey ? '灵鹿在线' : '等待配置 Key' }}</text>
+            </view>
+            <view class="send-btn" :class="{ disabled: !canSend }" @tap="sendDraft">发送</view>
+          </view>
         </view>
       </view>
     </view>
 
-    <AppTabBar current="/pages/ai-assistant/index" />
   </view>
 </template>
 
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import AppTabBar from '../../components/AppTabBar.vue'
-import { AI_MESSAGE_STORAGE, clearAiMessages, getAiApiKey, saveAiApiKey } from '../../config/ai'
+import { getStoredAuthUser } from '../../common/auth-storage'
+import { AI_MESSAGE_STORAGE, clearAiMessages, getAiApiKey } from '../../config/ai'
 import {
   chatWithTravelAssistant,
   getTravelAssistantPresetQuestions,
-  testTravelAssistantConnection,
 } from '../../services/ai'
 
 const presetQuestions = getTravelAssistantPresetQuestions()
 const savedApiKey = ref(getAiApiKey())
-const apiKeyInput = ref(savedApiKey.value)
 const draft = ref('')
-const sending = ref(false)
-const testing = ref(false)
+const awaitingReply = ref(false)
+const revealingReply = ref(false)
 const errorMessage = ref('')
-const testResult = ref(null)
 const messages = ref(loadMessages())
 const incomingContextTitle = ref('')
 const incomingContextDesc = ref('')
@@ -209,9 +223,24 @@ const incomingContextSource = ref('景区页')
 const incomingPrompt = ref('')
 const incomingContext = ref('')
 let responseRevealTimer = null
+let scrollTimer = null
+const assistantAvatar = '/static/ai/linglu-avatar.jpg'
+const currentUser = computed(() => getStoredAuthUser() || null)
+const userAvatar = computed(() => currentUser.value?.avatar_url || currentUser.value?.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=160')
 
 const hasApiKey = computed(() => Boolean(savedApiKey.value))
+const sending = computed(() => awaitingReply.value || revealingReply.value)
 const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value && hasApiKey.value)
+const hasStreamingAssistant = computed(() => messages.value.some((item) => item?.role === 'assistant' && item?.isStreaming))
+const dialogueStateText = computed(() => {
+  if (awaitingReply.value) {
+    return '思考中'
+  }
+  if (revealingReply.value) {
+    return '回复中'
+  }
+  return `${messages.value.length} 条记录`
+})
 
 function getMessageBlocks(item) {
   const content = getRenderableMessageContent(item)
@@ -232,6 +261,10 @@ function getRenderableMessageContent(item) {
   }
 
   return item.content || ''
+}
+
+function isAssistantStreaming(item) {
+  return Boolean(item?.role === 'assistant' && item?.isStreaming)
 }
 
 function parseAssistantMarkdown(content) {
@@ -409,16 +442,19 @@ function loadMessages() {
 }
 
 function persistMessages() {
-  uni.setStorageSync(AI_MESSAGE_STORAGE, JSON.stringify(messages.value.map((item) => {
-    if (item?.role === 'assistant') {
-      return {
-        ...item,
-        displayContent: undefined,
+  uni.setStorageSync(AI_MESSAGE_STORAGE, JSON.stringify(messages.value
+    .filter((item) => item?.role !== 'assistant' || item?.content)
+    .map((item) => {
+      if (item?.role === 'assistant') {
+        return {
+          ...item,
+          displayContent: undefined,
+          isStreaming: false,
+        }
       }
-    }
 
-    return item
-  })))
+      return item
+    })))
 }
 
 function createMessage(role, content) {
@@ -427,51 +463,6 @@ function createMessage(role, content) {
     role,
     content,
     createdAt: Date.now(),
-  }
-}
-
-function saveApiKeyToStorage() {
-  const value = saveAiApiKey(apiKeyInput.value)
-  savedApiKey.value = value
-  apiKeyInput.value = value
-  errorMessage.value = ''
-  testResult.value = null
-  uni.showToast({
-    title: value ? '已保存到本机' : '已清除本地 Key',
-    icon: 'none',
-  })
-}
-
-async function runConnectionTest() {
-  if (testing.value) {
-    return
-  }
-
-  if (!hasApiKey.value) {
-    errorMessage.value = '请先保存百炼 API Key，再开始测试。'
-    testResult.value = null
-    return
-  }
-
-  testing.value = true
-  errorMessage.value = ''
-  testResult.value = null
-
-  try {
-    const result = await testTravelAssistantConnection()
-    testResult.value = {
-      ok: true,
-      message: `模型返回：${result.text}`,
-      meta: `模型：${result.model} ｜ 耗时：${result.elapsedMs}ms`,
-    }
-  } catch (error) {
-    testResult.value = {
-      ok: false,
-      message: error.message || '连接测试失败',
-      meta: '请先确认 Key 是否完整、当前网络是否可访问百炼接口。',
-    }
-  } finally {
-    testing.value = false
   }
 }
 
@@ -513,22 +504,24 @@ async function sendQuestion(question, extraContext = '') {
   errorMessage.value = ''
   stopResponseReveal()
   const userMessage = createMessage('user', content)
-  const nextMessages = [...messages.value, userMessage]
+  const assistantMessage = {
+    ...createMessage('assistant', ''),
+    displayContent: '',
+    isStreaming: true,
+  }
+  const nextMessages = [...messages.value, userMessage, assistantMessage]
   messages.value = nextMessages
   persistMessages()
-  sending.value = true
+  awaitingReply.value = true
   await scrollToConversationBottom()
 
   try {
     const answer = await chatWithTravelAssistant(nextMessages, extraContext)
-    const assistantMessage = {
-      ...createMessage('assistant', answer),
-      displayContent: '',
-    }
-    messages.value = [...nextMessages, assistantMessage]
+    assistantMessage.content = answer
+    awaitingReply.value = false
     await revealAssistantMessage(assistantMessage.id, answer)
   } catch (error) {
-    messages.value = nextMessages
+    messages.value = messages.value.filter((item) => item.id !== assistantMessage.id)
     persistMessages()
     errorMessage.value = error.message || 'AI 响应失败，请稍后再试。'
     uni.showToast({
@@ -537,14 +530,17 @@ async function sendQuestion(question, extraContext = '') {
       duration: 2500,
     })
   } finally {
-    sending.value = false
+    awaitingReply.value = false
+    revealingReply.value = false
   }
 }
 
 async function revealAssistantMessage(messageId, fullText) {
   const text = String(fullText || '')
-  const chunkSize = text.length > 900 ? 24 : text.length > 400 ? 16 : 10
+  const chunks = buildRevealChunks(text)
   let cursor = 0
+  let scrollTick = 0
+  revealingReply.value = true
 
   return new Promise((resolve) => {
     const step = async () => {
@@ -555,25 +551,75 @@ async function revealAssistantMessage(messageId, fullText) {
         return
       }
 
-      cursor = Math.min(text.length, cursor + chunkSize)
-      target.displayContent = text.slice(0, cursor)
+      target.displayContent += chunks[cursor] || ''
       messages.value = [...messages.value]
-      await scrollToConversationBottom()
+      scrollTick += 1
+      if (scrollTick === 1 || scrollTick % 2 === 0 || cursor >= chunks.length - 1) {
+        await scrollToConversationBottom(120)
+      }
 
-      if (cursor >= text.length) {
+      if (cursor >= chunks.length - 1) {
         target.displayContent = text
+        target.isStreaming = false
         messages.value = [...messages.value]
         persistMessages()
+        revealingReply.value = false
         stopResponseReveal()
         resolve()
         return
       }
 
-      responseRevealTimer = setTimeout(step, 40)
+      cursor += 1
+      responseRevealTimer = setTimeout(step, getRevealDelay(chunks[cursor]))
     }
 
     step()
   })
+}
+
+function buildRevealChunks(text) {
+  const source = String(text || '')
+  const lines = source.match(/.*?(?:\n|$)/g)?.filter(Boolean) || []
+  const chunks = []
+
+  lines.forEach((line) => {
+    const parts = line.match(/[^。！？!?\n]+[。！？!?]?|\n/g) || [line]
+    parts.forEach((part) => {
+      if (!part) {
+        return
+      }
+
+      if (part === '\n') {
+        chunks.push(part)
+        return
+      }
+
+      if (part.length <= 24) {
+        chunks.push(part)
+        return
+      }
+
+      for (let index = 0; index < part.length; index += 18) {
+        chunks.push(part.slice(index, index + 18))
+      }
+    })
+  })
+
+  return chunks.length ? chunks : [source]
+}
+
+function getRevealDelay(chunk) {
+  const text = String(chunk || '')
+  if (/^[\n]+$/.test(text)) {
+    return 90
+  }
+  if (/[。！？!?]$/.test(text.trim())) {
+    return 120
+  }
+  if (text.length >= 16) {
+    return 55
+  }
+  return 35
 }
 
 function stopResponseReveal() {
@@ -581,16 +627,26 @@ function stopResponseReveal() {
     clearTimeout(responseRevealTimer)
     responseRevealTimer = null
   }
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+    scrollTimer = null
+  }
+  revealingReply.value = false
 }
 
-async function scrollToConversationBottom() {
+async function scrollToConversationBottom(duration = 280) {
   await nextTick()
 
-  setTimeout(() => {
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+  }
+
+  scrollTimer = setTimeout(() => {
     uni.pageScrollTo({
       selector: '#ai-response-anchor',
-      duration: 280,
+      duration,
     })
+    scrollTimer = null
   }, 80)
 }
 
@@ -646,86 +702,109 @@ function sendIncomingPrompt() {
 
 .assistant-banner {
   position: relative;
-  padding-top: 82rpx;
-  padding-bottom: 64rpx;
+  padding-top: 52rpx;
+  padding-bottom: 40rpx;
   color: #ffffff;
   overflow: hidden;
+  background-image: linear-gradient(180deg, rgba(67, 36, 24, 0.28), rgba(67, 36, 24, 0.46)), url('/static/ai/linglu-background.jpg');
+  background-size: cover;
+  background-position: center;
 }
 
 .assistant-banner::after {
   content: '';
   position: absolute;
-  right: -120rpx;
-  top: 100rpx;
-  width: 340rpx;
-  height: 340rpx;
+  right: -80rpx;
+  top: 54rpx;
+  width: 280rpx;
+  height: 280rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   filter: blur(8rpx);
 }
 
 .hero-inner {
   position: relative;
   z-index: 1;
-}
-
-.private-tools {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   align-items: center;
-  gap: 10rpx;
-}
-
-.mini-key-input {
-  width: 240rpx;
-  height: 54rpx;
-  padding: 0 16rpx;
-  border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.14);
-  color: #ffffff;
-  font-size: 20rpx;
-}
-
-.mini-action {
-  min-width: 54rpx;
-  height: 54rpx;
-  padding: 0 16rpx;
-  border-radius: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.mini-action.dark {
-  background: rgba(45, 24, 16, 0.28);
-}
-
-.mini-action.disabled {
-  opacity: 0.5;
 }
 
 .hero-copy {
-  margin-top: 54rpx;
-  max-width: 520rpx;
+  margin-top: 18rpx;
+  max-width: 560rpx;
+  width: 100%;
+}
+
+.assistant-hero-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  text-align: center;
+}
+
+.assistant-hero-text {
+  width: 100%;
+}
+
+.assistant-avatar,
+.user-avatar,
+.bubble-avatar {
+  flex-shrink: 0;
+}
+
+.user-avatar {
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12rpx 24rpx rgba(45, 24, 16, 0.1);
+}
+
+.assistant-avatar {
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 12rpx 24rpx rgba(45, 24, 16, 0.12);
+  overflow: hidden;
+}
+
+.hero-avatar {
+  width: 104rpx;
+  height: 104rpx;
+}
+
+.bubble-avatar {
+  width: 68rpx;
+  height: 68rpx;
+  margin-top: 8rpx;
 }
 
 .banner-title {
   display: block;
-  margin-top: 18rpx;
-  font-size: 64rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
+  font-size: 56rpx;
+  font-weight: 600;
+  letter-spacing: 4rpx;
+  font-family: 'STKaiti', 'KaiTi', 'FangSong', serif;
+  text-shadow: 0 6rpx 18rpx rgba(25, 13, 8, 0.28);
+}
+
+.banner-subtitle {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  line-height: 1.55;
+  opacity: 0.92;
 }
 
 .hero-status {
-  margin-top: 22rpx;
+  margin-top: 18rpx;
   display: inline-flex;
   align-items: center;
   gap: 12rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .status-dot {
@@ -740,8 +819,8 @@ function sendIncomingPrompt() {
 }
 
 .hero-status-text {
-  font-size: 22rpx;
-  opacity: 0.88;
+  font-size: 20rpx;
+  opacity: 0.94;
 }
 
 .context-shell {
@@ -805,43 +884,6 @@ function sendIncomingPrompt() {
   color: $theme-color;
 }
 
-.test-shell {
-  margin-top: 24rpx;
-}
-
-.test-card {
-  padding: 26rpx 28rpx;
-  border-radius: 24rpx;
-  border: 2rpx solid rgba(47, 125, 75, 0.18);
-  background: rgba(47, 125, 75, 0.06);
-}
-
-.test-card.failed {
-  border-color: rgba(196, 69, 54, 0.18);
-  background: rgba(196, 69, 54, 0.08);
-}
-
-.test-title {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 600;
-}
-
-.test-desc {
-  display: block;
-  margin-top: 10rpx;
-  font-size: 24rpx;
-  line-height: 1.7;
-  color: $theme-text;
-}
-
-.test-meta {
-  display: block;
-  margin-top: 10rpx;
-  font-size: 22rpx;
-  line-height: 1.6;
-}
-
 .section-block {
   margin-top: 40rpx;
 }
@@ -859,19 +901,19 @@ function sendIncomingPrompt() {
 }
 
 .shortcut-list {
-  margin-top: 24rpx;
+  margin-top: 18rpx;
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
+  gap: 10rpx;
 }
 
 .shortcut-pill {
-  padding: 16rpx 24rpx;
+  padding: 10rpx 18rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.9);
   border: 2rpx solid rgba(196, 69, 54, 0.1);
   color: $theme-text;
-  font-size: 24rpx;
+  font-size: 20rpx;
 }
 
 .dialogue-head {
@@ -879,12 +921,6 @@ function sendIncomingPrompt() {
   align-items: baseline;
   justify-content: space-between;
   gap: 20rpx;
-}
-
-.dialogue-note {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 22rpx;
 }
 
 .dialogue-state {
@@ -926,7 +962,7 @@ function sendIncomingPrompt() {
 
 .dialogue-surface {
   margin-top: 24rpx;
-  padding: 30rpx;
+  padding: 22rpx;
   border-radius: 34rpx;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 250, 245, 0.9));
   border: 2rpx solid rgba(196, 69, 54, 0.08);
@@ -944,11 +980,13 @@ function sendIncomingPrompt() {
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 28rpx;
+  gap: 18rpx;
 }
 
 .message-row {
   display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
 }
 
 .message-row.assistant {
@@ -961,22 +999,27 @@ function sendIncomingPrompt() {
 
 .message-bubble {
   max-width: 86%;
-  padding: 26rpx;
-  border-radius: 26rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 22rpx;
   background: #f7f2ec;
 }
 
 .message-row.mine .message-bubble,
 .user-bubble {
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   background: $theme-color;
   color: #ffffff;
   box-shadow: 0 14rpx 28rpx rgba(196, 69, 54, 0.16);
 }
 
+.message-row.mine .message-role,
+.message-row.mine .message-content,
+.message-row.mine .strong {
+  color: #ffffff;
+}
+
 .assistant-bubble {
-  width: 100%;
-  max-width: 100%;
+  max-width: calc(100% - 84rpx);
   background: #ffffff;
   border: 2rpx solid rgba(196, 69, 54, 0.09);
   border-left: 8rpx solid rgba(196, 69, 54, 0.44);
@@ -984,22 +1027,22 @@ function sendIncomingPrompt() {
 }
 
 .intro-bubble {
-  max-width: 100%;
+  max-width: calc(100% - 84rpx);
 }
 
 .message-role {
   display: block;
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 700;
-  letter-spacing: 1rpx;
+  letter-spacing: 0.5rpx;
   opacity: 0.68;
 }
 
 .message-content {
   display: block;
-  margin-top: 10rpx;
-  font-size: 25rpx;
-  line-height: 1.8;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
@@ -1012,10 +1055,65 @@ function sendIncomingPrompt() {
 }
 
 .assistant-markdown {
-  margin-top: 12rpx;
+  margin-top: 8rpx;
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 10rpx;
+}
+
+.assistant-streaming {
+  margin-top: 8rpx;
+}
+
+.streaming-content {
+  display: inline;
+  animation: streamFadeIn 0.18s ease-out;
+}
+
+.assistant-content.plain-content {
+  color: $theme-text;
+}
+
+.stream-cursor {
+  margin-left: 4rpx;
+  font-size: 20rpx;
+  color: $theme-color;
+  opacity: 0.88;
+  animation: cursorBlink 0.9s steps(1) infinite;
+}
+
+.streaming-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 44rpx;
+}
+
+.waiting-text {
+  font-size: 20rpx;
+  color: $theme-muted;
+}
+
+.waiting-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.waiting-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: rgba(196, 69, 54, 0.6);
+  animation: waitingPulse 1.1s ease-in-out infinite;
+}
+
+.waiting-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.waiting-dot:nth-child(3) {
+  animation-delay: 0.32s;
 }
 
 .markdown-heading {
@@ -1026,22 +1124,22 @@ function sendIncomingPrompt() {
 }
 
 .markdown-heading.level-1 {
-  font-size: 34rpx;
+  font-size: 28rpx;
 }
 
 .markdown-heading.level-2 {
-  font-size: 31rpx;
+  font-size: 26rpx;
 }
 
 .markdown-heading.level-3 {
-  font-size: 28rpx;
+  font-size: 24rpx;
 }
 
 .markdown-paragraph {
   display: block;
   color: $theme-text;
-  font-size: 26rpx;
-  line-height: 1.82;
+  font-size: 22rpx;
+  line-height: 1.62;
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -1049,21 +1147,21 @@ function sendIncomingPrompt() {
 .markdown-list {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
 .markdown-list-row {
   display: flex;
   align-items: flex-start;
-  gap: 14rpx;
+  gap: 10rpx;
 }
 
 .markdown-marker {
-  min-width: 34rpx;
+  min-width: 28rpx;
   color: $theme-color;
-  font-size: 25rpx;
+  font-size: 21rpx;
   font-weight: 700;
-  line-height: 1.8;
+  line-height: 1.6;
   text-align: right;
   flex-shrink: 0;
 }
@@ -1071,18 +1169,18 @@ function sendIncomingPrompt() {
 .markdown-list-content {
   flex: 1;
   color: $theme-text;
-  font-size: 26rpx;
-  line-height: 1.82;
+  font-size: 22rpx;
+  line-height: 1.62;
   word-break: break-word;
 }
 
 .markdown-note {
-  padding: 18rpx 22rpx;
-  border-radius: 22rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 18rpx;
   background: rgba(196, 69, 54, 0.08);
   color: $theme-color;
-  font-size: 24rpx;
-  line-height: 1.7;
+  font-size: 20rpx;
+  line-height: 1.55;
 }
 
 .strong {
@@ -1091,19 +1189,57 @@ function sendIncomingPrompt() {
 }
 
 .typing-row {
-  margin-top: 24rpx;
+  margin-top: 18rpx;
   display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
 }
 
 .typing-card {
-  padding: 18rpx 22rpx;
+  padding: 12rpx 16rpx;
   border-radius: 999rpx;
   background: rgba(232, 168, 124, 0.14);
 }
 
 .typing-text {
-  font-size: 22rpx;
+  font-size: 19rpx;
   color: $theme-muted;
+}
+
+@keyframes waitingPulse {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0) scale(0.82);
+    opacity: 0.36;
+  }
+
+  40% {
+    transform: translateY(-4rpx) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes cursorBlink {
+  0%,
+  49% {
+    opacity: 0.92;
+  }
+
+  50%,
+  100% {
+    opacity: 0.08;
+  }
+}
+
+@keyframes streamFadeIn {
+  from {
+    opacity: 0.7;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .response-anchor {
@@ -1112,41 +1248,77 @@ function sendIncomingPrompt() {
 }
 
 .composer-space {
-  height: 340rpx;
+  height: 240rpx;
 }
 
 .composer-wrap {
   position: fixed;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: calc(134rpx + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 18;
+  padding: 16rpx 20rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: rgba(250, 248, 245, 0.96);
+  border-top: 2rpx solid rgba(196, 69, 54, 0.08);
+  backdrop-filter: blur(18rpx);
 }
 
-.composer {
-  padding: 16rpx;
-  border-radius: 32rpx;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 20rpx 46rpx rgba(45, 24, 16, 0.12);
+.composer-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16rpx;
+}
+
+.composer-input-shell {
+  flex: 1;
+  min-width: 0;
+  padding: 14rpx 16rpx 14rpx 20rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18rpx 40rpx rgba(45, 24, 16, 0.1);
 }
 
 .composer-input {
   width: 100%;
-  min-height: 104rpx;
-  max-height: 240rpx;
-  padding: 18rpx 20rpx;
-  border-radius: 24rpx;
-  background: #f5efe8;
+  min-height: 84rpx;
+  max-height: 220rpx;
+  padding: 16rpx 14rpx;
+  border-radius: 22rpx;
+  background: #f7f1eb;
   font-size: 26rpx;
   line-height: 1.6;
 }
 
 .composer-foot {
-  margin-top: 16rpx;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
+  justify-content: flex-end;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.composer-status-pill {
+  margin-right: auto;
+  height: 54rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: rgba(47, 125, 75, 0.08);
+  color: #2f7d4b;
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.composer-status-pill.offline {
+  background: rgba(196, 69, 54, 0.08);
+  color: $theme-color;
+}
+
+.composer-status-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .composer-hint {
@@ -1154,10 +1326,10 @@ function sendIncomingPrompt() {
 }
 
 .send-btn {
-  min-width: 132rpx;
-  height: 72rpx;
-  padding: 0 28rpx;
-  border-radius: 20rpx;
+  min-width: 120rpx;
+  height: 60rpx;
+  padding: 0 24rpx;
+  border-radius: 18rpx;
   background: $theme-color;
   color: #ffffff;
   display: flex;
@@ -1172,8 +1344,21 @@ function sendIncomingPrompt() {
 }
 
 @media screen and (max-width: 720rpx) {
+  .assistant-hero-row {
+    gap: 14rpx;
+  }
+
   .dialogue-head {
     align-items: flex-start;
+  }
+
+  .composer-foot {
+    flex-wrap: wrap;
+  }
+
+  .composer-status-pill {
+    order: 3;
+    margin-right: 0;
   }
 }
 </style>

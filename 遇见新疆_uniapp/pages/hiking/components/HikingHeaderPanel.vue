@@ -40,10 +40,6 @@
       </view>
     </view>
 
-    <view v-if="debugText" class="debug-panel">
-      <text class="debug-title">定位调试</text>
-      <text class="debug-text">{{ debugText }}</text>
-    </view>
   </view>
 </template>
 
@@ -74,10 +70,6 @@ defineProps({
     default: false,
   },
   modeText: {
-    type: String,
-    default: '',
-  },
-  debugText: {
     type: String,
     default: '',
   },
@@ -287,31 +279,6 @@ defineProps({
   height: 10rpx;
   background: #34c759;
   border-radius: 50%;
-}
-
-.debug-panel {
-  margin-top: 10rpx;
-  padding: 12rpx 14rpx;
-  border-radius: 14rpx;
-  background: rgba(255, 149, 0, 0.08);
-  border: 1px solid rgba(255, 149, 0, 0.18);
-}
-
-.debug-title,
-.debug-text {
-  display: block;
-}
-
-.debug-title {
-  font-size: 18rpx;
-  color: #ffb457;
-  margin-bottom: 4rpx;
-}
-
-.debug-text {
-  font-size: 18rpx;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.72);
 }
 
 @media (max-width: 420px) {

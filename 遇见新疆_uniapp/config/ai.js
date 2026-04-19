@@ -1,6 +1,6 @@
 export const AI_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 export const AI_MODEL = 'qwen3.6-plus'
-export const AI_API_KEY = ''
+export const AI_API_KEY = 'sk-3fe7770e329745158297f54d09d2adcb'
 export const AI_API_KEY_PLACEHOLDER = '请在本地保存百炼API Key'
 export const AI_API_KEY_STORAGE = 'meet-xinjiang-ai-api-key'
 export const AI_MESSAGE_STORAGE = 'meet-xinjiang-ai-messages'

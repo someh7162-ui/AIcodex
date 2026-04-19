@@ -3,7 +3,7 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "云起天山",
+        "navigationBarTitleText": "丝路疆寻",
         "navigationStyle": "custom"
       }
     },
@@ -87,7 +87,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "云起天山",
+    "navigationBarTitleText": "丝路疆寻",
     "navigationBarBackgroundColor": "#FAF8F5",
     "backgroundColor": "#FAF8F5"
   },

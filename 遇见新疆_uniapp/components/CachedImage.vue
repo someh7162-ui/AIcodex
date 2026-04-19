@@ -70,6 +70,10 @@ function toDisplayPath(filePath) {
     return raw
   }
 
+  if (raw.startsWith('/static/') || raw.startsWith('static/')) {
+    return raw.startsWith('/') ? raw : `/${raw}`
+  }
+
   if (typeof plus !== 'undefined' && plus.io && typeof plus.io.convertLocalFileSystemURL === 'function') {
     const absolutePath = plus.io.convertLocalFileSystemURL(raw)
     if (absolutePath) {

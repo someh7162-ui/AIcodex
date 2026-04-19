@@ -20,6 +20,20 @@ export function gcj02ToWgs84(longitude, latitude) {
   }
 }
 
+export function wgs84ToGcj02(longitude, latitude) {
+  const lng = Number(longitude)
+  const lat = Number(latitude)
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null
+  }
+
+  if (isOutOfChina(lng, lat)) {
+    return { longitude: lng, latitude: lat }
+  }
+
+  return calcDelta(lng, lat)
+}
+
 function isOutOfChina(longitude, latitude) {
   return longitude < 72.004 || longitude > 137.8347 || latitude < 0.8293 || latitude > 55.8271
 }
