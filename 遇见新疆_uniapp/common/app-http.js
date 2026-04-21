@@ -80,6 +80,12 @@ function plusRequest({ url, method = 'GET', data, headers = {}, timeout = 20000 
         return
       }
 
+      console.log('[app-http] plus response', {
+        url,
+        method,
+        statusCode: Number(xhr.status || 0),
+      })
+
       resolve({
         statusCode: Number(xhr.status || 0),
         data: parseResponseData(xhr.responseText),
@@ -87,10 +93,12 @@ function plusRequest({ url, method = 'GET', data, headers = {}, timeout = 20000 
     }
 
     xhr.onerror = () => {
+      console.error('[app-http] plus fail', { url, method, readyState: xhr.readyState, status: xhr.status })
       reject(new Error('网络请求失败'))
     }
 
     xhr.ontimeout = () => {
+      console.error('[app-http] plus timeout', { url, method, timeout })
       reject(new Error('请求超时'))
     }
 
@@ -106,13 +114,29 @@ function uniRequest(options) {
         ...res,
         data: normalizePayloadUrls(res.data),
       }),
-      fail: (error) => reject(error),
+      fail: (error) => {
+        console.error('[app-http] uni fail', {
+          url: options?.url,
+          method: options?.method,
+          error,
+          errMsg: error?.errMsg,
+        })
+        reject(error)
+      },
     })
   })
 }
 
 export function requestJson(options) {
-  if (canUsePlusRequest(options?.url)) {
+  const method = String(options?.method || 'GET').toUpperCase()
+  const shouldUsePlusRequest = canUsePlusRequest(options?.url) && ['GET', 'POST', 'PUT', 'DELETE'].includes(method)
+  console.log('[app-http] request', {
+    url: options?.url,
+    method,
+    transport: shouldUsePlusRequest ? 'plus.net.XMLHttpRequest' : 'uni.request',
+  })
+
+  if (shouldUsePlusRequest) {
     return plusRequest(options)
   }
 

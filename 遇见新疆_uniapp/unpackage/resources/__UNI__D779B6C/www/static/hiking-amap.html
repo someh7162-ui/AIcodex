@@ -12,92 +12,104 @@
       background: linear-gradient(180deg, #18314c 0%, #0b1118 100%);
       overflow: hidden;
     }
-    #status {
-      position: fixed;
-      left: 12px;
-      top: 12px;
-      z-index: 9999;
-      padding: 8px 10px;
-      border-radius: 10px;
-      background: rgba(7, 10, 12, 0.78);
-      color: #fff;
-      font: 12px/1.4 sans-serif;
-      max-width: 72vw;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
-    }
+
     .amap-logo,
     .amap-copyright {
-      opacity: 0.7 !important;
+      opacity: 0.72 !important;
     }
+
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <div id="status">AMAP APP v106 booting...</div>
-  <script>
-    window.AMAP_WEB_KEY = 'c76a2f7390ccb7c9d095cc9ff1408aee'
-  </script>
-  <script src="https://webapi.amap.com/maps?v=2.0&key=c76a2f7390ccb7c9d095cc9ff1408aee"></script>
   <script>
     (function () {
       var map = null
       var marker = null
       var polyline = null
-      var statusEl = document.getElementById('status')
+      var pendingState = null
+      var sdkReady = false
+      var sdkVersion = '1.4.15'
+      var amapKey = getQueryParam('key') || ''
+      var initialMode = getQueryParam('mode') || 'satellite'
+      var securityJsCode = getQueryParam('securityJsCode') || ''
 
-      function log() {
-        var args = Array.prototype.slice.call(arguments)
-        args.unshift('[hiking-amap-html]')
-        console.log.apply(console, args)
-      }
-
-      function setStatus(text) {
-        if (statusEl) {
-          statusEl.textContent = text
+      function getQueryParam(name) {
+        var search = String(window.location.search || '').replace(/^\?/, '')
+        if (!search) {
+          return ''
         }
-        log('status:', text)
+
+        var pairs = search.split('&')
+        for (var index = 0; index < pairs.length; index += 1) {
+          var parts = pairs[index].split('=')
+          if (decodeURIComponent(parts[0] || '') === name) {
+            return decodeURIComponent(parts[1] || '')
+          }
+        }
+
+        return ''
       }
 
       function createPoint(longitude, latitude) {
         var lng = Number(longitude)
         var lat = Number(latitude)
-        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-          log('invalid point', { longitude: longitude, latitude: latitude })
+        if (!Number.isFinite(lng) || !Number.isFinite(lat) || !window.AMap) {
           return null
         }
         return new AMap.LngLat(lng, lat)
       }
 
+      function buildLayers(mode) {
+        if (!window.AMap) {
+          return []
+        }
+
+        if (mode === 'normal') {
+          return [new AMap.TileLayer()]
+        }
+
+        return [
+          new AMap.TileLayer.Satellite(),
+          new AMap.TileLayer.RoadNet(),
+        ]
+      }
+
       function ensureMap(state) {
-        if (map) {
-          log('map already exists')
+        if (map || !window.AMap) {
           return
         }
 
-        setStatus('AMAP APP v106 sdk ok, initializing map...')
-        log('ensureMap state', state)
+        try {
+          map = new AMap.Map('map', {
+            zoom: Number(state.zoom || 16),
+            center: createPoint(state.longitude, state.latitude) || undefined,
+            viewMode: '2D',
+            mapStyle: 'amap://styles/normal',
+            layers: buildLayers(state.mode || initialMode),
+            resizeEnable: true,
+            rotateEnable: false,
+          })
+        } catch (err) {}
+      }
 
-        map = new AMap.Map('map', {
-          zoom: Number(state.zoom || 16),
-          center: createPoint(state.longitude, state.latitude),
-          viewMode: '2D',
-          mapStyle: 'amap://styles/normal',
-          layers: [
-            new AMap.TileLayer.Satellite(),
-            new AMap.TileLayer.RoadNet(),
-          ],
-          resizeEnable: true,
-          rotateEnable: false,
-        })
+      function updateLayers(mode) {
+        if (!map || !window.AMap) {
+          return
+        }
 
-        setStatus('AMAP APP v106 map initialized')
-        log('map initialized', { zoom: state.zoom, longitude: state.longitude, latitude: state.latitude })
+        try {
+          if (typeof map.setLayers === 'function') {
+            map.setLayers(buildLayers(mode || initialMode))
+          }
+        } catch (err) {}
       }
 
       function updateMarker(state) {
-        var point = createPoint(state.longitude, state.latitude)
-        if (!point) {
-          log('updateMarker skipped, invalid point')
+        var markers = Array.isArray(state.markers) ? state.markers : []
+        var firstMarker = markers[0] || state
+        var point = createPoint(firstMarker.longitude, firstMarker.latitude)
+        if (!point || !window.AMap || !map) {
           return
         }
 
@@ -105,18 +117,24 @@
           marker = new AMap.Marker({
             position: point,
             anchor: 'center',
-            label: {
-              content: '当前位置',
-              direction: 'top',
-            },
+            label: firstMarker.label
+              ? {
+                  content: firstMarker.label,
+                  direction: 'top',
+                }
+              : undefined,
           })
           marker.setMap(map)
-          log('marker created')
           return
         }
 
         marker.setPosition(point)
-        log('marker updated')
+        if (typeof marker.setLabel === 'function') {
+          marker.setLabel({
+            content: firstMarker.label || '',
+            direction: 'top',
+          })
+        }
       }
 
       function updateTrack(state) {
@@ -127,7 +145,6 @@
           : []
 
         if (!points.length) {
-          log('updateTrack empty')
           if (polyline) {
             polyline.setMap(null)
             polyline = null
@@ -146,51 +163,64 @@
             lineCap: 'round',
           })
           polyline.setMap(map)
-          log('polyline created', { count: points.length })
           return
         }
 
         polyline.setPath(points)
-        log('polyline updated', { count: points.length })
       }
 
       function applyState(state) {
-        if (!window.AMap) {
-          setStatus('AMAP APP v106 waiting for sdk...')
-          log('AMap missing on applyState')
+        pendingState = state || pendingState || {}
+        if (!sdkReady || !window.AMap) {
           return
         }
 
-        log('applyState', state)
-        ensureMap(state)
-        var point = createPoint(state.longitude, state.latitude)
-        if (point) {
-          map.setZoomAndCenter(Number(state.zoom || 16), point)
-          log('setZoomAndCenter ok')
-          updateMarker(state)
+        ensureMap(pendingState)
+        if (!map) {
+          return
         }
-        updateTrack(state)
-        setStatus('AMAP APP v106 render ok')
+
+        updateLayers(pendingState.mode || initialMode)
+
+        var point = createPoint(pendingState.longitude, pendingState.latitude)
+        if (point) {
+          try {
+            map.setZoomAndCenter(Number(pendingState.zoom || 16), point)
+          } catch (err) {}
+        }
+
+        updateMarker(pendingState)
+        updateTrack(pendingState)
+      }
+
+      function loadAmapSdk() {
+        if (!amapKey) {
+          return
+        }
+
+        if (securityJsCode) {
+          window._AMapSecurityConfig = Object.assign({}, window._AMapSecurityConfig || {}, {
+            securityJsCode: securityJsCode,
+          })
+        }
+
+        var script = document.createElement('script')
+        script.src = 'https://webapi.amap.com/maps?v=' + encodeURIComponent(sdkVersion) + '&key=' + encodeURIComponent(amapKey)
+        script.async = true
+        script.defer = true
+        script.onload = function () {
+          sdkReady = true
+          applyState(pendingState || { zoom: 16, mode: initialMode })
+        }
+        script.onerror = function () {}
+        document.head.appendChild(script)
       }
 
       window.updateMapState = function (state) {
-        try {
-          applyState(state || {})
-        } catch (error) {
-          setStatus('AMAP APP v106 update failed')
-          console.error('updateMapState failed', error)
-        }
+        applyState(state || {})
       }
 
-      window.addEventListener('load', function () {
-        log('page load event', { hasAMap: !!window.AMap, key: window.AMAP_WEB_KEY })
-        setStatus(window.AMap ? 'AMAP APP v106 sdk loaded' : 'AMAP APP v106 page loaded')
-        applyState({ zoom: 16 })
-      })
-
-      window.addEventListener('error', function (event) {
-        log('window error', { message: event.message, source: event.filename, line: event.lineno, column: event.colno })
-      })
+      loadAmapSdk()
     })()
   </script>
 </body>

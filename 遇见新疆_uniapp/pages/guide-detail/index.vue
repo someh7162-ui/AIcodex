@@ -6,11 +6,15 @@
         <view class="icon-btn" @tap="goBack">‹</view>
         <view class="author-strip">
           <CachedImage
+            v-if="guideAuthorAvatar"
             :src="guideAuthorAvatar"
             container-class="author-avatar-shell"
             image-class="author-avatar"
             style="width: 72rpx; height: 72rpx; border-radius: 50%; flex-shrink: 0;"
           />
+          <view v-else class="author-avatar-shell author-avatar-placeholder">
+            <text class="author-avatar-placeholder-text">{{ authorInitial }}</text>
+          </view>
           <view class="author-copy">
             <text class="author-name">{{ guide.nickname || guide.author }}</text>
             <text class="author-meta" v-if="guide.authorFollowerCount || guide.authorFollowingCount">
@@ -60,14 +64,12 @@
           ></view>
         </view>
 
-        <view v-if="!hasVideo && !guideImages.length" class="text-hero-card section">
-          <text class="text-hero-kicker">{{ guide.locationTag || '新疆同城' }}</text>
-          <text class="text-hero-copy">{{ guide.summaryText || guide.excerpt || '这是一条没有配图的文字笔记，适合直接查看内容和标签。' }}</text>
-        </view>
       </view>
 
       <view class="content-shell section">
         <text class="note-title">{{ guide.title }}</text>
+
+        <text v-if="detailSummary" class="note-summary">{{ detailSummary }}</text>
 
         <view v-if="detailTags.length" class="tag-row">
           <text v-for="item in detailTags" :key="item" class="tag-chip">#{{ item }}</text>
@@ -102,20 +104,23 @@
           </view>
         </view>
 
-        <view class="track-map-shell">
+        <view class="track-map-shell" @tap="openTrackPreview">
           <HikingTileMapCompat
             :map-center="guideTrackCenter"
             :map-scale="14"
             :map-polyline="guideTrackPolyline"
-            :map-markers="guideTrackMarkers"
+            :map-markers="[]"
+            :show-center-marker="false"
             map-mode-key="satellite"
           />
+          <view class="track-map-hint" @tap="openTrackPreview">放大查看路线</view>
         </view>
 
         <view class="track-meta-row">
           <text class="track-meta-label">终点坐标</text>
           <text class="track-meta-value">{{ guideTrackCoordinateText }}</text>
         </view>
+        <view class="track-preview-action" @tap="openTrackPreview">查看大图</view>
       </view>
 
       <view class="comment-head section">
@@ -230,11 +235,12 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
 import { clearAuthSession, getStoredAuthToken, getStoredAuthUser, saveAuthSession } from '../../common/auth-storage'
 import { formatTrackDuration } from '../../common/guide-track'
-import { buildCurrentMarker, buildTrackPolyline, formatCoordinate } from '../../common/hiking-metrics'
+import { saveGuideTrackPreview } from '../../common/guide-track-preview'
+import { buildTrackPolyline, formatCoordinate } from '../../common/hiking-metrics'
 import HikingTileMapCompat from '../hiking/components/HikingTileMapCompat.vue'
 import { followUser, getMyProfile, unfollowUser } from '../../services/auth'
 import {
@@ -265,6 +271,7 @@ const commentInputFocused = ref(false)
 const commentsLoading = ref(false)
 const commentError = ref('')
 const commentDeletingId = ref('')
+const trackPreviewOpening = ref(false)
 
 const systemInfo = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync() : {}
 const statusBarHeight = systemInfo.statusBarHeight || 20
@@ -292,6 +299,7 @@ const guideAuthorAvatar = computed(() => {
 
   return guide.value?.authorAvatar || ''
 })
+const authorInitial = computed(() => getAvatarInitial(guide.value?.nickname || guide.value?.author || guide.value?.email || ''))
 const showFollowButton = computed(() => Boolean(guide.value?.authorId))
 const commentInputAvatar = computed(() => currentUserAvatar.value)
 const commentInputInitial = computed(() => getAvatarInitial(currentUser.value?.nickname || currentUser.value?.email || ''))
@@ -355,10 +363,13 @@ const detailTags = computed(() => {
     .filter(Boolean)
     .slice(0, 4)
 })
+const detailSummary = computed(() => {
+  const summary = guide.value?.summaryText || guide.value?.excerpt || ''
+  return String(summary || '').trim()
+})
 const guideTrack = computed(() => guide.value?.hikingTrack || null)
 const guideTrackCenter = computed(() => guideTrack.value?.endPoint || guideTrack.value?.startPoint || null)
 const guideTrackPolyline = computed(() => buildTrackPolyline(guideTrack.value?.points || []))
-const guideTrackMarkers = computed(() => buildCurrentMarker(guideTrackCenter.value, false))
 const guideTrackDistanceText = computed(() => {
   const distanceKm = Number(guideTrack.value?.distanceKm || 0)
   return distanceKm > 0 ? `${distanceKm.toFixed(2)} km` : '--'
@@ -400,6 +411,10 @@ onLoad(async (options) => {
     detailLoading.value = false
   }
   activeImageIndex.value = 0
+})
+
+onShow(() => {
+  trackPreviewOpening.value = false
 })
 
 async function refreshCurrentUser() {
@@ -648,6 +663,46 @@ function previewImage(index) {
   })
 }
 
+function openTrackPreview() {
+  if (!guideTrack.value) {
+    console.warn('[guide-track-preview] skip open: no track')
+    return
+  }
+
+  if (trackPreviewOpening.value) {
+    console.warn('[guide-track-preview] skip open: navigate locked')
+    return
+  }
+
+  trackPreviewOpening.value = true
+
+  console.log('[guide-track-preview] open from detail', {
+    title: guide.value?.title || '',
+    pointCount: Number(guideTrack.value?.pointCount || guideTrack.value?.points?.length || 0),
+    distanceKm: Number(guideTrack.value?.distanceKm || 0),
+  })
+
+  saveGuideTrackPreview({
+    title: guide.value?.title || '',
+    track: guideTrack.value,
+  })
+
+  console.log('[guide-track-preview] navigateTo start')
+  uni.navigateTo({
+    url: '/pages/track-preview/index',
+    success(res) {
+      console.log('[guide-track-preview] navigateTo success', res)
+    },
+    fail(error) {
+      trackPreviewOpening.value = false
+      console.error('[guide-track-preview] navigateTo fail', error)
+      if (!String(error?.errMsg || '').includes('locked')) {
+        uni.showToast({ title: '打开路线预览失败', icon: 'none' })
+      }
+    },
+  })
+}
+
 async function handleFollowTap() {
   if (!guide.value?.authorId || isOwnAuthor.value || followLoading.value) {
     return
@@ -818,6 +873,7 @@ function formatCommentTime(value) {
   flex-shrink: 0;
 }
 
+.author-avatar-placeholder,
 .comment-avatar-placeholder {
   background: linear-gradient(135deg, #ffe8d6 0%, #ffd2c2 100%);
   display: flex;
@@ -825,6 +881,7 @@ function formatCommentTime(value) {
   justify-content: center;
 }
 
+.author-avatar-placeholder-text,
 .comment-avatar-placeholder-text {
   font-size: 28rpx;
   font-weight: 700;
@@ -980,6 +1037,14 @@ function formatCommentTime(value) {
   color: $theme-text;
 }
 
+.note-summary {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  line-height: 1.8;
+  color: rgba(15, 23, 42, 0.68);
+}
+
 .note-body {
   display: block;
   margin-top: 24rpx;
@@ -1114,11 +1179,42 @@ function formatCommentTime(value) {
   border-radius: 28rpx;
   overflow: hidden;
   background: #0b0d10;
+  position: relative;
+}
+
+.track-map-hint {
+  position: absolute;
+  right: 18rpx;
+  bottom: 18rpx;
+  height: 54rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.74);
+  color: #fffdf8;
+  font-size: 22rpx;
+  letter-spacing: 1rpx;
 }
 
 .track-meta-row {
   margin-top: 18rpx;
   align-items: center;
+}
+
+.track-preview-action {
+  margin-top: 18rpx;
+  height: 72rpx;
+  border-radius: 22rpx;
+  border: 2rpx solid rgba(223, 92, 70, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #c35a32;
 }
 
 .track-meta-value {

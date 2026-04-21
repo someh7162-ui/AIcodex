@@ -97,7 +97,15 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <CachedImage :src="displayAuthorAvatar(item)" container-class="author-avatar-shell" image-class="author-avatar" />
+                  <CachedImage
+                    v-if="hasAuthorAvatar(item)"
+                    :src="displayAuthorAvatar(item)"
+                    container-class="author-avatar-shell"
+                    image-class="author-avatar"
+                  />
+                  <view v-else class="author-avatar-shell author-avatar-fallback">
+                    <text class="author-avatar-fallback-text">{{ authorAvatarFallbackText(item) }}</text>
+                  </view>
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.category }}</text>
@@ -139,7 +147,15 @@
               <view class="feed-content">
                 <text class="feed-title">{{ item.title }}</text>
                 <view class="author-row">
-                  <CachedImage :src="displayAuthorAvatar(item)" container-class="author-avatar-shell" image-class="author-avatar" />
+                  <CachedImage
+                    v-if="hasAuthorAvatar(item)"
+                    :src="displayAuthorAvatar(item)"
+                    container-class="author-avatar-shell"
+                    image-class="author-avatar"
+                  />
+                  <view v-else class="author-avatar-shell author-avatar-fallback">
+                    <text class="author-avatar-fallback-text">{{ authorAvatarFallbackText(item) }}</text>
+                  </view>
                   <text class="author-name">{{ item.nickname }}</text>
                   <text class="author-dot">·</text>
                   <text class="author-meta">{{ item.publishDate }}</text>
@@ -433,6 +449,15 @@ function displayAuthorAvatar(item) {
   }
 
   return item?.authorAvatar || ''
+}
+
+function hasAuthorAvatar(item) {
+  return Boolean(String(displayAuthorAvatar(item) || '').trim())
+}
+
+function authorAvatarFallbackText(item) {
+  const source = String(item?.nickname || item?.author || '游').trim()
+  return source.slice(0, 1).toUpperCase()
 }
 
 function matchesGuideSearch(item, keyword) {
@@ -965,6 +990,21 @@ function isSameCityGuide(item) {
   height: 38rpx;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.author-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(212, 165, 116, 0.28), rgba(195, 120, 78, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.author-avatar-fallback-text {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #fffdf8;
+  line-height: 1;
 }
 
 .author-name,

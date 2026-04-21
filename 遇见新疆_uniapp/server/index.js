@@ -137,6 +137,90 @@ function parsePositiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function normalizeNumber(value, fallback = 0) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizeTrackPoint(point) {
+  if (!point || typeof point !== 'object') {
+    return null
+  }
+
+  const latitude = normalizeNumber(point.latitude, NaN)
+  const longitude = normalizeNumber(point.longitude, NaN)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null
+  }
+
+  return {
+    latitude,
+    longitude,
+    altitude: normalizeNumber(point.altitude),
+    speed: normalizeNumber(point.speed),
+    accuracy: normalizeNumber(point.accuracy),
+    timestamp: normalizeNumber(point.timestamp, Date.now()),
+    segmentIndex: Math.max(0, Math.floor(normalizeNumber(point.segmentIndex))),
+  }
+}
+
+function normalizeHikingTrackInput(track) {
+  if (!track || typeof track !== 'object') {
+    return null
+  }
+
+  const points = Array.isArray(track.points)
+    ? track.points.map(normalizeTrackPoint).filter(Boolean)
+    : []
+
+  if (points.length < 2) {
+    return null
+  }
+
+  const capturedAt = normalizeNumber(track.capturedAt, points[points.length - 1]?.timestamp || Date.now())
+
+  return {
+    title: normalizeText(track.title) || formatHikingTrackTitle(capturedAt),
+    points,
+    pointCount: Math.max(points.length, Math.floor(normalizeNumber(track.pointCount, points.length))),
+    distanceKm: Math.max(0, normalizeNumber(track.distanceKm)),
+    durationMs: Math.max(0, Math.floor(normalizeNumber(track.durationMs))),
+    altitudeGain: Math.max(0, normalizeNumber(track.altitudeGain)),
+    capturedAt,
+    startPoint: points[0],
+    endPoint: points[points.length - 1],
+  }
+}
+
+function mapHikingTrack(row) {
+  const normalized = normalizeHikingTrackInput(row)
+  if (!normalized) {
+    return null
+  }
+
+  return {
+    id: row.id ? String(row.id) : `track-${normalized.capturedAt}`,
+    title: normalizeText(row.title) || normalized.title,
+    points: normalized.points,
+    pointCount: normalized.pointCount,
+    distanceKm: normalized.distanceKm,
+    durationMs: normalized.durationMs,
+    altitudeGain: normalized.altitudeGain,
+    capturedAt: normalized.capturedAt,
+    startPoint: normalized.startPoint,
+    endPoint: normalized.endPoint,
+  }
+}
+
+function formatHikingTrackTitle(timestamp) {
+  const date = new Date(normalizeNumber(timestamp, Date.now()))
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+  return `${month}-${day} ${hours}:${minutes} 徒步轨迹`
+}
+
 function deriveGuideCategory(subCategory = '') {
   const categoryMap = {
     自驾: '自驾建议',
@@ -342,6 +426,7 @@ function mapGuide(req, row, sections = []) {
 
   return {
     id: row.slug,
+    destinationId: row.destination_id ? Number(row.destination_id) : null,
     title: row.title,
     category: row.category,
     readTime: row.read_time || '',
@@ -380,6 +465,7 @@ function mapGuide(req, row, sections = []) {
     summaryText: row.summary_text || row.excerpt || '',
     hasMedia: Boolean(previewImage || videoUrl),
     recommendationScore: Number(row.recommendation_score) || 0,
+    hikingTrack: mapHikingTrack(row.hiking_track),
   }
 }
 
@@ -653,10 +739,16 @@ app.get('/api/guides', optionalAuthMiddleware, asyncRoute(async (req, res) => {
   const scope = normalizeText(req.query.scope)
   const where = ["g.status = 'published'"]
   const params = [viewerId]
+  const destinationId = Number.parseInt(req.query.destinationId, 10)
 
   if (scope === 'following' && viewerId) {
     params.push(viewerId)
     where.push(`EXISTS (SELECT 1 FROM user_follows uf WHERE uf.follower_id = $${params.length} AND uf.following_id = g.author_id)`)
+  }
+
+  if (Number.isInteger(destinationId) && destinationId > 0) {
+    params.push(destinationId)
+    where.push(`g.destination_id = $${params.length}`)
   }
 
   const result = await db.query(
@@ -732,6 +824,129 @@ app.patch('/api/users/me', authMiddleware, asyncRoute(async (req, res) => {
     params
   )
   res.json({ user: publicUser(result.rows[0]) })
+}))
+
+app.get('/api/users/me/hiking-tracks', authMiddleware, asyncRoute(async (req, res) => {
+  const result = await db.query(
+    `
+      SELECT id, title, points, point_count, distance_km, duration_ms, altitude_gain, captured_at
+      FROM user_hiking_tracks
+      WHERE user_id = $1
+      ORDER BY captured_at DESC, created_at DESC
+    `,
+    [req.user.sub]
+  )
+
+  res.json({
+    list: result.rows.map((row) => mapHikingTrack({
+      id: row.id,
+      title: row.title,
+      points: row.points,
+      pointCount: row.point_count,
+      distanceKm: row.distance_km,
+      durationMs: row.duration_ms,
+      altitudeGain: row.altitude_gain,
+      capturedAt: row.captured_at,
+    })).filter(Boolean),
+  })
+}))
+
+app.post('/api/users/me/hiking-tracks', authMiddleware, asyncRoute(async (req, res) => {
+  const hikingTrack = normalizeHikingTrackInput(req.body)
+  if (!hikingTrack) {
+    res.status(400).json({ message: '徒步轨迹无效，至少需要两个有效轨迹点。' })
+    return
+  }
+
+  const result = await db.query(
+    `
+      INSERT INTO user_hiking_tracks (
+        user_id,
+        title,
+        points,
+        point_count,
+        distance_km,
+        duration_ms,
+        altitude_gain,
+        captured_at
+      )
+      VALUES ($1, $2, $3::JSONB, $4, $5, $6, $7, $8)
+      RETURNING id, title, points, point_count, distance_km, duration_ms, altitude_gain, captured_at
+    `,
+    [
+      req.user.sub,
+      hikingTrack.title,
+      JSON.stringify(hikingTrack.points),
+      hikingTrack.pointCount,
+      hikingTrack.distanceKm,
+      hikingTrack.durationMs,
+      hikingTrack.altitudeGain,
+      hikingTrack.capturedAt,
+    ]
+  )
+
+  res.status(201).json({
+    data: mapHikingTrack({
+      id: result.rows[0].id,
+      title: result.rows[0].title,
+      points: result.rows[0].points,
+      pointCount: result.rows[0].point_count,
+      distanceKm: result.rows[0].distance_km,
+      durationMs: result.rows[0].duration_ms,
+      altitudeGain: result.rows[0].altitude_gain,
+      capturedAt: result.rows[0].captured_at,
+    }),
+  })
+}))
+
+app.patch('/api/users/me/hiking-tracks/:id', authMiddleware, asyncRoute(async (req, res) => {
+  const title = normalizeText(req.body?.title)
+  if (!title) {
+    res.status(400).json({ message: '轨迹名称不能为空。' })
+    return
+  }
+
+  const result = await db.query(
+    `
+      UPDATE user_hiking_tracks
+      SET title = $1
+      WHERE id = $2 AND user_id = $3
+      RETURNING id, title, points, point_count, distance_km, duration_ms, altitude_gain, captured_at
+    `,
+    [title, req.params.id, req.user.sub]
+  )
+
+  if (!result.rows[0]) {
+    res.status(404).json({ message: '徒步轨迹不存在。' })
+    return
+  }
+
+  res.json({
+    data: mapHikingTrack({
+      id: result.rows[0].id,
+      title: result.rows[0].title,
+      points: result.rows[0].points,
+      pointCount: result.rows[0].point_count,
+      distanceKm: result.rows[0].distance_km,
+      durationMs: result.rows[0].duration_ms,
+      altitudeGain: result.rows[0].altitude_gain,
+      capturedAt: result.rows[0].captured_at,
+    }),
+  })
+}))
+
+app.delete('/api/users/me/hiking-tracks/:id', authMiddleware, asyncRoute(async (req, res) => {
+  const result = await db.query(
+    `DELETE FROM user_hiking_tracks WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [req.params.id, req.user.sub]
+  )
+
+  if (!result.rows[0]) {
+    res.status(404).json({ message: '徒步轨迹不存在。' })
+    return
+  }
+
+  res.json({ ok: true })
 }))
 
 app.get('/api/users/me/guides', authMiddleware, asyncRoute(async (req, res) => {
@@ -886,6 +1101,7 @@ app.post('/api/guides/media', authMiddleware, guideUpload.single('file'), asyncR
 }))
 
 app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
+  const destinationId = Number.parseInt(req.body.destinationId, 10)
   const title = normalizeText(req.body.title)
   const excerpt = normalizeText(req.body.excerpt)
   const summaryText = normalizeText(req.body.summaryText || req.body.summary || req.body.excerpt)
@@ -899,6 +1115,7 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
   const category = normalizeText(req.body.category) || deriveGuideCategory(subCategory)
   const location = normalizeText(req.body.location) || '新疆同城'
   const locationTag = normalizeText(req.body.locationTag) || location
+  const hikingTrack = normalizeHikingTrackInput(req.body.hikingTrack)
   const coverAspectRatio = parsePositiveNumber(req.body.coverAspectRatio, video ? 1.45 : (images.length ? 1.34 : 0.84))
   const readTime = normalizeText(req.body.readTime) || '2 分钟阅读'
   const sectionItems = Array.isArray(req.body.sections)
@@ -930,6 +1147,17 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
     return
   }
 
+  if (Number.isInteger(destinationId) && destinationId > 0) {
+    const destinationCheck = await db.query(
+      `SELECT id FROM destinations WHERE id = $1 AND status = 'published' LIMIT 1`,
+      [destinationId]
+    )
+    if (!destinationCheck.rows[0]) {
+      res.status(400).json({ message: '关联景区不存在。' })
+      return
+    }
+  }
+
   const slug = `published-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`
   const client = await db.pool.connect()
 
@@ -940,6 +1168,7 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
       `
         INSERT INTO guides (
           slug,
+          destination_id,
           title,
           category,
           sub_category,
@@ -960,6 +1189,7 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
           images,
           video_url,
           video_poster_url,
+          hiking_track,
           excerpt,
           summary_text,
           highlights,
@@ -972,13 +1202,14 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
           status
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, '0', '0', 0, 0, 0,
-          $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, '发现', '同城', $20, 1, 0, 'published'
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE, '0', '0', 0, 0, 0,
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, '发现', '同城', $22, 1, 0, 'published'
         )
         RETURNING id
       `,
       [
         slug,
+        Number.isInteger(destinationId) && destinationId > 0 ? destinationId : null,
         title,
         category,
         subCategory,
@@ -993,6 +1224,7 @@ app.post('/api/guides', authMiddleware, asyncRoute(async (req, res) => {
         images,
         video,
         videoPoster,
+        hikingTrack,
         excerpt || summaryText,
         summaryText || excerpt,
         highlights,

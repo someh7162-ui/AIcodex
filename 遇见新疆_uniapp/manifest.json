@@ -1,40 +1,110 @@
 {
-  "name": "丝路疆寻",
-  "appid": "__UNI__D779B6C",
-  "description": "丝路疆寻安卓应用，包含目的地推荐、旅行指南与个人中心页面。",
-  "versionName": "1.0.9",
-  "versionCode": "109",
-  "transformPx": false,
-  "app-plus": {
-    "usingComponents": true,
-    "nvueStyleCompiler": "uni-app",
-    "networkTimeout": {
-      "request": 15000,
-      "uploadFile": 30000
+    "name" : "丝路疆寻",
+    "appid" : "__UNI__D779B6C",
+    "description" : "丝路疆寻安卓应用，包含目的地推荐、旅行指南与个人中心页面。",
+    "versionName" : "1.0.9",
+    "versionCode" : "109",
+    "transformPx" : false,
+    "app-plus" : {
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "networkTimeout" : {
+            "request" : 15000,
+            "uploadFile" : 30000
+        },
+        "ssl" : "none",
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : true,
+            "waiting" : true,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        "distribute" : {
+            "android" : {
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_LOCATION_EXTRA_COMMANDS\"/>"
+                ]
+            },
+            "splashscreen" : {
+                "androidStyle" : "default",
+                "android" : {
+                    "xxhdpi" : "F:\\AI编程\\遇见新疆_uniapp\\Gemini_Generated_Image_ocjtkdocjtkdocjt.png",
+                    "hdpi" : ""
+                }
+            },
+            "ios" : {
+                "dSYMs" : false
+            },
+            "sdkConfigs" : {
+                "maps" : {
+                    "amap" : {
+                        "name" : "Wt浪迹天涯",
+                        "appkey_ios" : "com.autonavi.HelloAmap",
+                        "appkey_android" : "bed8e38d988db90848b38b64fddf09fd"
+                    }
+                },
+                "geolocation" : {
+                    "system" : {
+                        "__platform__" : [ "ios", "android" ]
+                    },
+                    "amap" : {
+                        "name" : "Wt浪迹天涯",
+                        "__platform__" : [ "ios", "android" ],
+                        "appkey_ios" : "com.autonavi.HelloAmap",
+                        "appkey_android" : "bed8e38d988db90848b38b64fddf09fd"
+                    }
+                },
+                "speech" : {}
+            },
+            "icons" : {
+                "android" : {
+                    "hdpi" : "unpackage/res/icons/72x72.png",
+                    "xhdpi" : "unpackage/res/icons/96x96.png",
+                    "xxhdpi" : "unpackage/res/icons/144x144.png",
+                    "xxxhdpi" : "unpackage/res/icons/192x192.png"
+                },
+                "ios" : {
+                    "appstore" : "unpackage/res/icons/1024x1024.png",
+                    "ipad" : {
+                        "app" : "unpackage/res/icons/76x76.png",
+                        "app@2x" : "unpackage/res/icons/152x152.png",
+                        "notification" : "unpackage/res/icons/20x20.png",
+                        "notification@2x" : "unpackage/res/icons/40x40.png",
+                        "proapp@2x" : "unpackage/res/icons/167x167.png",
+                        "settings" : "unpackage/res/icons/29x29.png",
+                        "settings@2x" : "unpackage/res/icons/58x58.png",
+                        "spotlight" : "unpackage/res/icons/40x40.png",
+                        "spotlight@2x" : "unpackage/res/icons/80x80.png"
+                    },
+                    "iphone" : {
+                        "app@2x" : "unpackage/res/icons/120x120.png",
+                        "app@3x" : "unpackage/res/icons/180x180.png",
+                        "notification@2x" : "unpackage/res/icons/40x40.png",
+                        "notification@3x" : "unpackage/res/icons/60x60.png",
+                        "settings@2x" : "unpackage/res/icons/58x58.png",
+                        "settings@3x" : "unpackage/res/icons/87x87.png",
+                        "spotlight@2x" : "unpackage/res/icons/80x80.png",
+                        "spotlight@3x" : "unpackage/res/icons/120x120.png"
+                    }
+                }
+            }
+        },
+        "modules" : {
+            "Maps" : {},
+            "Geolocation" : {},
+            "Contacts" : {},
+            "Camera" : {},
+            "SQLite" : {}
+        }
     },
-    "ssl": "none",
-    "splashscreen": {
-      "alwaysShowBeforeRender": true,
-      "waiting": true,
-      "autoclose": true,
-      "delay": 0
+    "quickapp" : {},
+    "mp-weixin" : {
+        "appid" : ""
     },
-    "distribute": {
-      "android": {
-        "permissions": [
-          "<uses-permission android:name=\"android.permission.INTERNET\"/>",
-          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
-          "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
-          "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
-          "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
-          "<uses-permission android:name=\"android.permission.ACCESS_LOCATION_EXTRA_COMMANDS\"/>"
-        ]
-      }
-    }
-  },
-  "quickapp": {},
-  "mp-weixin": {
-    "appid": ""
-  },
-  "vueVersion": "3"
+    "vueVersion" : "3"
 }

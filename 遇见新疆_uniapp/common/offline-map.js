@@ -41,8 +41,26 @@ export async function downloadOfflineMap({ destinationId, scenicName, mapUrl, ve
     throw new Error('离线地图资源不存在。')
   }
 
+  const normalizedUrl = String(mapUrl || '').trim()
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    const record = {
+      destinationId: String(destinationId),
+      scenicName: scenicName || '景区离线地图',
+      savedFilePath: normalizedUrl,
+      sourceUrl: normalizedUrl,
+      version: version || 'v1',
+      downloadedAt: Date.now(),
+      metadata: metadata || null,
+      resourceType: 'bundled',
+    }
+
+    saveOfflineMapRecord(destinationId, record)
+    return record
+  }
+
   const downloadRes = await uni.downloadFile({
-    url: mapUrl,
+    url: normalizedUrl,
   })
 
   if (downloadRes.statusCode !== 200 || !downloadRes.tempFilePath) {
@@ -61,10 +79,11 @@ export async function downloadOfflineMap({ destinationId, scenicName, mapUrl, ve
     destinationId: String(destinationId),
     scenicName: scenicName || '景区离线地图',
     savedFilePath: saveRes.savedFilePath,
-    sourceUrl: mapUrl,
+    sourceUrl: normalizedUrl,
     version: version || 'v1',
     downloadedAt: Date.now(),
     metadata: metadata || null,
+    resourceType: 'downloaded',
   }
 
   saveOfflineMapRecord(destinationId, record)
@@ -75,7 +94,7 @@ export async function downloadOfflineMap({ destinationId, scenicName, mapUrl, ve
 export async function deleteOfflineMap(destinationId) {
   const record = getOfflineMapRecord(destinationId)
 
-  if (record?.savedFilePath) {
+  if (record?.savedFilePath && record.resourceType !== 'bundled') {
     try {
       await uni.removeSavedFile({
         filePath: record.savedFilePath,

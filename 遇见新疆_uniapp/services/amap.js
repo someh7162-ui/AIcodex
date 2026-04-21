@@ -18,7 +18,7 @@ function request(url, data = {}) {
   })
 }
 
-export function getStaticMapUrl({ longitude, latitude, markers = [], zoom = 11, size = '750*360' }) {
+export function getStaticMapUrl({ longitude, latitude, markers = [], paths = [], zoom = 11, size = '750*360' }) {
   if (!hasAmapKey() || longitude === undefined || latitude === undefined) {
     return ''
   }
@@ -27,7 +27,293 @@ export function getStaticMapUrl({ longitude, latitude, markers = [], zoom = 11, 
     .map((item) => `${item.size || 'mid'},0xC44536,${item.label || ''}:${item.longitude},${item.latitude}`)
     .join('|')
 
-  return `https://restapi.amap.com/v3/staticmap?key=${encodeURIComponent(AMAP_WEB_KEY)}&size=${encodeURIComponent(size)}&scale=2&zoom=${zoom}&center=${longitude},${latitude}&markers=${encodeURIComponent(markerText)}`
+  const pathText = paths
+    .filter((item) => Array.isArray(item?.points) && item.points.length >= 2)
+    .map((item) => {
+      const style = [item.weight || 6, item.color || '0xC44536', item.fillColor || '0x00000000']
+      const points = item.points
+        .map((point) => `${point.longitude},${point.latitude}`)
+        .join(';')
+
+      return `${style.join(',')}:${points}`
+    })
+    .join('|')
+
+  const params = [
+    `key=${encodeURIComponent(AMAP_WEB_KEY)}`,
+    `size=${encodeURIComponent(size)}`,
+    'scale=2',
+    `zoom=${zoom}`,
+    `center=${longitude},${latitude}`,
+  ]
+
+  if (markerText) {
+    params.push(`markers=${encodeURIComponent(markerText)}`)
+  }
+
+  if (pathText) {
+    params.push(`paths=${encodeURIComponent(pathText)}`)
+  }
+
+  return `https://restapi.amap.com/v3/staticmap?${params.join('&')}`
+}
+
+async function searchPlaceText(keywords, location, city) {
+  if (!hasAmapKey() || !keywords) {
+    return []
+  }
+
+  const cityValue = String(city || '').trim()
+  const data = await request('https://restapi.amap.com/v3/place/text', {
+    key: AMAP_WEB_KEY,
+    keywords,
+    offset: 5,
+    page: 1,
+    extensions: 'base',
+    location: location ? `${location.longitude},${location.latitude}` : undefined,
+    city: cityValue || undefined,
+    citylimit: cityValue ? true : undefined,
+  })
+
+  if (data.status !== '1' || !Array.isArray(data.pois)) {
+    return []
+  }
+
+  return data.pois
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function extractNavigationAreas(regionText) {
+  const raw = String(regionText || '').trim().replace(/^新疆维吾尔自治区/, '').replace(/^新疆/, '').trim()
+  if (!raw) {
+    return []
+  }
+
+  const knownAreas = [
+    '乌鲁木齐', '伊犁', '阿勒泰', '喀什', '阿克苏', '吐鲁番', '昌吉', '博州', '巴州', '克拉玛依', '塔城', '哈密', '和田', '克州', '阿拉尔', '图木舒克', '五家渠', '石河子', '北屯', '铁门关', '双河', '可克达拉', '昆玉', '胡杨河',
+    '阜康', '布尔津', '博乐', '塔县', '新源', '特克斯', '和静', '库车', '鄯善', '富蕴', '奇台', '昭苏', '温宿', '尉犁', '库尔勒', '沙湾', '霍城', '博湖', '轮台', '泽普', '吐鲁番', '乌鲁木齐', '达坂城',
+  ]
+
+  const result = []
+  knownAreas.forEach((item) => {
+    if (raw.includes(item) && !result.includes(item)) {
+      result.push(item)
+    }
+  })
+
+  if (result.length) {
+    return result
+  }
+
+  return raw.split(/[\s/、,-]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+function buildNavigationSearchKeywords(name, address, region) {
+  const values = [
+    String(name || '').trim(),
+    [name, address].filter(Boolean).join(' '),
+    [region, name].filter(Boolean).join(' '),
+    [region, address].filter(Boolean).join(' '),
+    [region, name, address].filter(Boolean).join(' '),
+    String(address || '').trim(),
+  ]
+
+  return [...new Set(values.filter(Boolean))]
+}
+
+function scoreNavigationPoi(poi, name, address, locationHint) {
+  const poiName = normalizeText(poi?.name)
+  const poiAddress = normalizeText(poi?.address)
+  const targetName = normalizeText(name)
+  const targetAddress = normalizeText(address)
+  const targetText = `${targetName} ${targetAddress}`
+  const poiText = `${poiName} ${poiAddress}`
+  let score = 0
+  const adminKeywords = ['管理委员会', '管委会', '委员会', '管理处', '政务', '政府', '机关', '旅游局', '办公区']
+  const scenicKeywords = ['景区', '风景区', '风景名胜区', '游客中心', '游客服务中心', '游客服务区', '停车场', '入口', '售票处', '检票口']
+
+  if (targetName && poiName === targetName) {
+    score += 140
+  } else if (targetName && (poiName.includes(targetName) || targetName.includes(poiName))) {
+    score += 90
+  }
+
+  if (targetAddress && poiAddress.includes(targetAddress)) {
+    score += 110
+  } else if (targetAddress && targetAddress.includes(poiAddress) && poiAddress) {
+    score += 60
+  }
+
+  if (scenicKeywords.some((item) => targetText.includes(item)) && scenicKeywords.some((item) => poiText.includes(item))) {
+    score += 40
+  }
+
+  if (adminKeywords.some((item) => poiText.includes(item)) && !adminKeywords.some((item) => targetText.includes(item))) {
+    score -= 260
+  }
+
+  if (locationHint && Number.isFinite(Number(locationHint.longitude)) && Number.isFinite(Number(locationHint.latitude))) {
+    const distance = getCoordinateDistanceMeters(locationHint, poi)
+    if (distance <= 100) {
+      score += 80
+    } else if (distance <= 500) {
+      score += 50
+    } else if (distance <= 1500) {
+      score += 20
+    }
+  }
+
+  return score
+}
+
+function getCoordinateDistanceMeters(from, to) {
+  const rad = Math.PI / 180
+  const lat1 = Number(from.latitude) * rad
+  const lat2 = Number(to.latitude) * rad
+  const deltaLat = lat2 - lat1
+  const deltaLng = (Number(to.longitude) - Number(from.longitude)) * rad
+  const sinLat = Math.sin(deltaLat / 2)
+  const sinLng = Math.sin(deltaLng / 2)
+  const a = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export async function resolveNavigationPoint({ name, address = '', region = '', longitude, latitude }) {
+  if (!hasAmapKey() || !name) {
+    return null
+  }
+
+  const locationHint = Number.isFinite(Number(longitude)) && Number.isFinite(Number(latitude))
+    ? { longitude: Number(longitude), latitude: Number(latitude) }
+    : null
+
+  const keywordsList = buildNavigationSearchKeywords(name, address, region)
+  const cityCandidates = extractNavigationAreas(region || address)
+  const candidates = []
+  const used = new Set()
+
+  for (const keywords of keywordsList) {
+    const citySearches = cityCandidates.length ? [...cityCandidates, ''] : ['']
+    for (const city of citySearches) {
+      const pois = await searchPlaceText(keywords, locationHint, city)
+      pois.forEach((item) => {
+        const normalized = normalizePoi(item, keywords)
+        if (!normalized) {
+          return
+        }
+
+        const uniqueKey = `${normalized.name}-${normalized.longitude.toFixed(6)}-${normalized.latitude.toFixed(6)}`
+        if (used.has(uniqueKey)) {
+          return
+        }
+
+        used.add(uniqueKey)
+        candidates.push(normalized)
+      })
+    }
+  }
+
+  if (!candidates.length) {
+    return null
+  }
+
+  return candidates
+    .map((item) => ({
+      ...item,
+      score: scoreNavigationPoi(item, name, address, locationHint),
+    }))
+    .sort((left, right) => right.score - left.score)[0]
+}
+
+async function searchPlaceAround(keyword, location, radius = 5000) {
+  if (!hasAmapKey() || !keyword || !location) {
+    return []
+  }
+
+  const data = await request('https://restapi.amap.com/v3/place/around', {
+    key: AMAP_WEB_KEY,
+    keywords: keyword,
+    location: `${location.longitude},${location.latitude}`,
+    radius,
+    offset: 8,
+    page: 1,
+    extensions: 'base',
+    sortrule: 'distance',
+  })
+
+  if (data.status !== '1' || !Array.isArray(data.pois)) {
+    return []
+  }
+
+  return data.pois
+}
+
+function normalizePoi(item, keyword = '') {
+  const [longitude, latitude] = String(item?.location || '')
+    .split(',')
+    .map((value) => Number(value))
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return null
+  }
+
+  return {
+    id: item.id || `${keyword}-${item.name || ''}-${longitude}-${latitude}`,
+    keyword,
+    name: item.name || keyword || '景区点位',
+    longitude,
+    latitude,
+    address: item.address || item.pname || item.cityname || '',
+    type: item.type || '',
+  }
+}
+
+export async function searchScenicSupportPoints({ scenicName, longitude, latitude, keywords = [], radius = 6000 }) {
+  if (!hasAmapKey() || !scenicName || !Number.isFinite(Number(longitude)) || !Number.isFinite(Number(latitude))) {
+    return []
+  }
+
+  const location = {
+    longitude: Number(longitude),
+    latitude: Number(latitude),
+  }
+
+  const searchKeywords = Array.isArray(keywords) && keywords.length
+    ? keywords
+    : ['游客中心', '景区入口', '停车场', '观景台', '服务点', '医务室']
+
+  const results = []
+  const used = new Set()
+
+  for (const keyword of searchKeywords) {
+    const textPois = await searchPlaceText(`${scenicName}${keyword}`, location)
+    const textMatch = textPois
+      .map((item) => normalizePoi(item, keyword))
+      .find(Boolean)
+
+    const aroundPois = textMatch ? [] : await searchPlaceAround(keyword, location, radius)
+    const aroundMatch = aroundPois
+      .map((item) => normalizePoi(item, keyword))
+      .find(Boolean)
+
+    const matched = textMatch || aroundMatch
+    if (!matched) {
+      continue
+    }
+
+    const uniqueKey = `${matched.name}-${matched.longitude.toFixed(6)}-${matched.latitude.toFixed(6)}`
+    if (used.has(uniqueKey)) {
+      continue
+    }
+
+    used.add(uniqueKey)
+    results.push(matched)
+  }
+
+  return results
 }
 
 export async function reverseGeocode(longitude, latitude, extensions = 'base') {
@@ -171,49 +457,74 @@ export async function getWalkingRoute(origin, destination) {
 }
 
 export async function getCurrentLocation(options = {}) {
+  const preferredProviders = Array.isArray(options.providers)
+    ? options.providers.map((item) => String(item || '').toLowerCase()).filter(Boolean)
+    : []
+
+  console.log('[hiking-location] getCurrentLocation start', {
+    highAccuracy: Boolean(options.highAccuracy),
+    allowGpsOffline: Boolean(options.allowGpsOffline),
+    coordsType: String(options.coordsType || ''),
+    providers: preferredProviders,
+    gpsTimeout: Number(options.gpsTimeout || 18000),
+    gpsMaximumAgeMs: Number(options.gpsMaximumAgeMs || 120000),
+    networkTimeout: Number(options.networkTimeout || 6000),
+    networkMaximumAgeMs: Number(options.networkMaximumAgeMs || 30000),
+    isAndroidRuntime: isAndroidRuntime(),
+  })
+
   await ensureLocationPermission()
 
   const attempts = []
   const gpsTimeout = Number(options.gpsTimeout || 18000)
   const networkTimeout = Number(options.networkTimeout || 6000)
-  const preferredProviders = Array.isArray(options.providers)
-    ? options.providers.map((item) => String(item || '').toLowerCase()).filter(Boolean)
-    : null
+  const providerFactories = {
+    gps: () => isAndroidRuntime()
+      ? {
+          label: 'android-gps',
+          run: () => requestAndroidProviderLocation('gps', { ...options, timeout: gpsTimeout, maximumAgeMs: Number(options.gpsMaximumAgeMs || 120000) }),
+        }
+      : null,
+    network: () => isAndroidRuntime()
+      ? {
+          label: 'android-network',
+          run: () => requestAndroidProviderLocation('network', { ...options, timeout: networkTimeout, maximumAgeMs: Number(options.networkMaximumAgeMs || 30000) }),
+        }
+      : null,
+    system: () => ({ label: 'plus-geolocation', run: () => requestPlusLocation(options) }),
+    'plus-geolocation': () => ({ label: 'plus-geolocation', run: () => requestPlusLocation(options) }),
+    gcj02: () => ({ label: 'uni-gcj02', run: () => requestUniLocation('gcj02') }),
+    'uni-gcj02': () => ({ label: 'uni-gcj02', run: () => requestUniLocation('gcj02') }),
+    wgs84: () => ({ label: 'uni-wgs84', run: () => requestUniLocation('wgs84') }),
+    'uni-wgs84': () => ({ label: 'uni-wgs84', run: () => requestUniLocation('wgs84') }),
+  }
 
-  const allowsProvider = (name) => !preferredProviders || preferredProviders.includes(String(name || '').toLowerCase())
+  const fallbackProviderOrder = isAndroidRuntime()
+    ? ['gps', 'network', 'system', 'gcj02', 'wgs84']
+    : ['system', 'gcj02', 'wgs84']
+  const providerOrder = preferredProviders.length ? preferredProviders : fallbackProviderOrder
+  const seenLabels = new Set()
 
-  if (isAndroidRuntime()) {
-    if (allowsProvider('gps')) {
-      attempts.push({
-        label: 'android-gps',
-        run: () => requestAndroidProviderLocation('gps', { ...options, timeout: gpsTimeout, maximumAgeMs: Number(options.gpsMaximumAgeMs || 120000) }),
-      })
+  providerOrder.forEach((providerName) => {
+    const factory = providerFactories[providerName]
+    if (!factory) {
+      return
     }
-
-    if (allowsProvider('network')) {
-      attempts.push({
-        label: 'android-network',
-        run: () => requestAndroidProviderLocation('network', { ...options, timeout: networkTimeout, maximumAgeMs: Number(options.networkMaximumAgeMs || 30000) }),
-      })
+    const attempt = factory()
+    if (!attempt || seenLabels.has(attempt.label)) {
+      return
     }
-  }
+    seenLabels.add(attempt.label)
+    attempts.push(attempt)
+  })
 
-  if (allowsProvider('system') || allowsProvider('plus-geolocation')) {
-    attempts.push({ label: 'plus-geolocation', run: () => requestPlusLocation(options) })
-  }
-
-  if (allowsProvider('gcj02') || allowsProvider('uni-gcj02')) {
-    attempts.push({ label: 'uni-gcj02', run: () => requestUniLocation('gcj02') })
-  }
-
-  if (allowsProvider('wgs84') || allowsProvider('uni-wgs84')) {
-    attempts.push({ label: 'uni-wgs84', run: () => requestUniLocation('wgs84') })
-  }
+  console.log('[hiking-location] attempts prepared', attempts.map((item) => item.label))
 
   let lastError = null
   const errors = []
   for (const attempt of attempts) {
     try {
+      console.log(`[hiking-location] trying ${attempt.label}`)
       const location = await attempt.run()
       if (location) {
         console.log(`[hiking-location] success via ${attempt.label}`, location)
@@ -228,6 +539,7 @@ export async function getCurrentLocation(options = {}) {
   }
 
   const detail = errors.length ? `；${errors.join(' | ')}` : ''
+  console.error('[hiking-location] all attempts failed', errors)
   throw new Error(`${normalizeLocationError(lastError) || '定位失败，请检查系统定位服务是否开启'}${detail}`)
 }
 
@@ -354,6 +666,7 @@ export function openAppPermissionSettings() {
 
 function requestUniLocation(type = 'gcj02') {
   return new Promise((resolve, reject) => {
+    console.log(`[hiking-location] uni.getLocation start (${type})`)
     uni.getLocation({
       type,
       isHighAccuracy: true,
@@ -379,6 +692,14 @@ function requestPlusLocation(options = {}) {
       return
     }
 
+    const requestedCoordsType = String(options.coordsType || 'gcj02').toLowerCase()
+    const plusCoordsType = requestedCoordsType === 'wgs84' ? 'gcj02' : requestedCoordsType
+
+    console.log('[hiking-location] plus.geolocation start', {
+      timeout: Number(options.timeout || 12000),
+      coordsType: plusCoordsType,
+    })
+
     plus.geolocation.getCurrentPosition(
       (position) => {
         const coords = position?.coords || {}
@@ -391,7 +712,7 @@ function requestPlusLocation(options = {}) {
           bearing: Number(coords.heading || 0),
           timestamp: Number(position.timestamp || Date.now()),
           provider: String(coords.provider || position.provider || 'plus-geolocation'),
-          coordinateSystem: String(position.coordsType || options.coordsType || 'gcj02'),
+          coordinateSystem: String(position.coordsType || plusCoordsType || 'gcj02'),
           source: 'plus.geolocation',
         })
       },
@@ -403,7 +724,7 @@ function requestPlusLocation(options = {}) {
         timeout: Number(options.timeout || 12000),
         maximumAge: 0,
         provider: 'system',
-        coordsType: options.coordsType || 'gcj02',
+        coordsType: plusCoordsType,
       },
     )
   })
@@ -458,6 +779,12 @@ function requestAndroidProviderLocation(providerName, options = {}) {
     }
 
     try {
+      console.log('[hiking-location] android provider start', {
+        providerName,
+        timeout: Number(options.timeout || (providerName === 'gps' ? 8000 : 5000)),
+        maximumAgeMs: Number(options.maximumAgeMs || 15000),
+      })
+
       const main = plus.android.runtimeMainActivity()
       const Context = plus.android.importClass('android.content.Context')
       plus.android.importClass('android.location.LocationManager')
@@ -473,6 +800,12 @@ function requestAndroidProviderLocation(providerName, options = {}) {
       const cached = normalizeAndroidLocation(locationManager.getLastKnownLocation(providerName), providerName, 'android-last-known')
       const maximumAgeMs = Number(options.maximumAgeMs || 15000)
       if (cached && Date.now() - cached.timestamp <= maximumAgeMs) {
+        console.log('[hiking-location] android provider cached hit', {
+          providerName,
+          ageMs: Date.now() - cached.timestamp,
+          accuracy: cached.accuracy,
+          source: cached.source,
+        })
         finishResolve(cached)
         return
       }
@@ -495,6 +828,12 @@ function requestAndroidProviderLocation(providerName, options = {}) {
       timer = setTimeout(() => {
         const lastKnown = normalizeAndroidLocation(locationManager.getLastKnownLocation(providerName), providerName, 'android-timeout-last-known')
         if (lastKnown) {
+          console.warn('[hiking-location] android provider timeout fallback', {
+            providerName,
+            ageMs: Date.now() - lastKnown.timestamp,
+            accuracy: lastKnown.accuracy,
+            source: lastKnown.source,
+          })
           finishResolve(lastKnown)
           return
         }

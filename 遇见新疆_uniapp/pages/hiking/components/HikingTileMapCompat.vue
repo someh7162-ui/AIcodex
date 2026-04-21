@@ -13,12 +13,13 @@
         ></image>
       </block>
 
-      <view
-        v-for="segment in trackSegments"
-        :key="segment.key"
-        class="track-segment"
-        :style="segment.style"
-      ></view>
+      <canvas
+        :canvas-id="canvasId"
+        class="track-canvas"
+        :style="canvasStyle"
+        :width="GRID_SIZE"
+        :height="GRID_SIZE"
+      ></canvas>
 
       <view
         v-for="marker in markerDots"
@@ -26,7 +27,10 @@
         class="marker-dot"
         :style="marker.style"
       >
+        <image v-if="marker.avatarUrl" class="marker-avatar" :src="marker.avatarUrl" mode="aspectFill"></image>
+        <text v-else class="marker-initial">{{ marker.avatarInitial }}</text>
         <view class="marker-core"></view>
+        <view class="marker-badge">{{ marker.statusText }}</view>
       </view>
     </view>
 
@@ -34,7 +38,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { resolveOfflineTileSource } from '../../../common/offline-tile-packs'
+import { simplifyTrackPoints } from '../../../common/hiking-track-display'
 import { getTiandituLayerConfig } from '../../../services/tianditu'
 
 const TILE_SIZE = 256
@@ -62,9 +68,19 @@ const props = defineProps({
     type: String,
     default: 'normal',
   },
+  offlinePackId: {
+    type: String,
+    default: '',
+  },
+  showCenterMarker: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const tileErrorCount = ref(0)
+const instance = getCurrentInstance()
+const canvasId = `hiking-tile-track-canvas-${instance?.uid || Date.now()}`
 
 const mapMode = computed(() => {
   if (props.mapModeKey === 'satellite') {
@@ -112,9 +128,25 @@ const tiles = computed(() => {
       const top = (row + TILE_RADIUS) * TILE_SIZE
       list.push({
         key: `${zoomLevel.value}-${tileX}-${tileY}`,
-        baseUrl: fillTileUrl(tileConfig.value.tileUrl, tileX, tileY, zoomLevel.value),
+        baseUrl: resolveOfflineTileSource({
+          packId: props.offlinePackId,
+          mode: mapMode.value,
+          layerType: 'base',
+          x: tileX,
+          y: tileY,
+          z: zoomLevel.value,
+          fallbackUrl: fillTileUrl(tileConfig.value.tileUrl, tileX, tileY, zoomLevel.value),
+        }),
         annotationUrl: tileConfig.value.annotationUrl
-          ? fillTileUrl(tileConfig.value.annotationUrl, tileX, tileY, zoomLevel.value)
+          ? resolveOfflineTileSource({
+              packId: props.offlinePackId,
+              mode: mapMode.value,
+              layerType: 'annotation',
+              x: tileX,
+              y: tileY,
+              z: zoomLevel.value,
+              fallbackUrl: fillTileUrl(tileConfig.value.annotationUrl, tileX, tileY, zoomLevel.value),
+            })
           : '',
         style: `left:${left}px;top:${top}px;width:${TILE_SIZE}px;height:${TILE_SIZE}px;`,
       })
@@ -124,7 +156,11 @@ const tiles = computed(() => {
 })
 
 const markerDots = computed(() => {
-  const list = (Array.isArray(props.mapMarkers) && props.mapMarkers.length ? props.mapMarkers : [props.mapCenter])
+  const source = Array.isArray(props.mapMarkers) && props.mapMarkers.length
+    ? props.mapMarkers
+    : (props.showCenterMarker && props.mapCenter ? [props.mapCenter] : [])
+
+  const list = source
     .map((item, index) => {
       const point = projectPoint(item?.longitude, item?.latitude)
       if (!point) {
@@ -132,7 +168,10 @@ const markerDots = computed(() => {
       }
       return {
         key: `marker-${index}`,
-        style: `left:${point.x - 18}px;top:${point.y - 18}px;`,
+        style: `left:${point.x - 26}px;top:${point.y - 26}px;`,
+        avatarUrl: String(item?.avatarUrl || ''),
+        avatarInitial: String(item?.avatarInitial || '游').slice(0, 1) || '游',
+        statusText: String(item?.statusText || item?.callout?.content || '当前位置'),
       }
     })
     .filter(Boolean)
@@ -140,36 +179,81 @@ const markerDots = computed(() => {
   return list.slice(0, 3)
 })
 
-const trackSegments = computed(() => {
+const displayTrackPoints = computed(() => {
   const line = Array.isArray(props.mapPolyline) ? props.mapPolyline[0] : null
   const points = Array.isArray(line?.points) ? line.points : []
+  return simplifyTrackPoints(points, zoomLevel.value)
+})
+const canvasStyle = computed(() => `left:0;top:0;width:${GRID_SIZE}px;height:${GRID_SIZE}px;`)
+
+onMounted(() => {
+  console.log('[tile-map] mounted', {
+    canvasId,
+    scale: zoomLevel.value,
+    hasCenter: Boolean(props.mapCenter),
+    markerCount: Array.isArray(props.mapMarkers) ? props.mapMarkers.length : 0,
+    polylinePoints: Array.isArray(props.mapPolyline?.[0]?.points) ? props.mapPolyline[0].points.length : 0,
+  })
+  scheduleCanvasDraw()
+})
+
+watch([projectedCenter, displayTrackPoints, zoomLevel], () => {
+  console.log('[tile-map] watch redraw', {
+    canvasId,
+    scale: zoomLevel.value,
+    displayPoints: displayTrackPoints.value.length,
+    hasProjectedCenter: Boolean(projectedCenter.value),
+  })
+  scheduleCanvasDraw()
+}, { deep: true })
+
+async function scheduleCanvasDraw() {
+  console.log('[tile-map] schedule draw', { canvasId })
+  await nextTick()
+  drawTrackCanvas()
+}
+
+function drawTrackCanvas() {
+  console.log('[tile-map] draw start', { canvasId })
+  const context = uni.createCanvasContext(canvasId, instance?.proxy)
+  context.clearRect(0, 0, GRID_SIZE, GRID_SIZE)
+
+  const line = Array.isArray(props.mapPolyline) ? props.mapPolyline[0] : null
   const color = line?.color || '#ff7a00'
+  const borderColor = line?.borderColor || '#c14f00'
   const width = Math.max(4, Number(line?.width || 5))
-  const segments = []
+  const points = displayTrackPoints.value
+    .map((point) => projectPoint(point?.longitude, point?.latitude))
+    .filter(Boolean)
 
-  for (let index = 1; index < points.length; index += 1) {
-    const start = projectPoint(points[index - 1]?.longitude, points[index - 1]?.latitude)
-    const end = projectPoint(points[index]?.longitude, points[index]?.latitude)
-    if (!start || !end) {
-      continue
+  if (points.length >= 2) {
+    context.beginPath()
+    context.setLineJoin('round')
+    context.setLineCap('round')
+    context.setStrokeStyle(borderColor)
+    context.setLineWidth(width + 2)
+    context.moveTo(points[0].x, points[0].y)
+    for (let index = 1; index < points.length; index += 1) {
+      context.lineTo(points[index].x, points[index].y)
     }
+    context.stroke()
 
-    const dx = end.x - start.x
-    const dy = end.y - start.y
-    const length = Math.sqrt(dx * dx + dy * dy)
-    if (!Number.isFinite(length) || length < 1) {
-      continue
+    context.beginPath()
+    context.setLineJoin('round')
+    context.setLineCap('round')
+    context.setStrokeStyle(color)
+    context.setLineWidth(width)
+    context.moveTo(points[0].x, points[0].y)
+    for (let index = 1; index < points.length; index += 1) {
+      context.lineTo(points[index].x, points[index].y)
     }
-
-    const angle = Math.atan2(dy, dx)
-    segments.push({
-      key: `segment-${index}`,
-      style: `left:${start.x}px;top:${start.y - width / 2}px;width:${length}px;height:${width}px;background:${color};transform:rotate(${angle}rad);`,
-    })
+    context.stroke()
   }
 
-  return segments
-})
+  context.draw(false, () => {
+    console.log('[tile-map] draw complete', { canvasId, pointCount: points.length })
+  })
+}
 
 function projectPoint(longitude, latitude) {
   if (!projectedCenter.value) {
@@ -250,7 +334,7 @@ function handleTileError() {
 }
 
 .tile-image,
-.track-segment,
+.track-canvas,
 .marker-dot {
   position: absolute;
 }
@@ -263,30 +347,61 @@ function handleTileError() {
   pointer-events: none;
 }
 
-.track-segment {
-  transform-origin: left center;
-  border-radius: 999px;
-  opacity: 0.9;
-  box-shadow: 0 0 0 1px rgba(193, 79, 0, 0.35);
+.track-canvas {
+  pointer-events: none;
 }
 
 .marker-dot {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: rgba(31, 147, 255, 0.22);
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  border: 3px solid rgba(255, 255, 255, 0.94);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 8px rgba(31, 147, 255, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  overflow: visible;
+}
+
+.marker-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.marker-initial {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fffdf8;
 }
 
 .marker-core {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #1f93ff;
+  background: #ff7a00;
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  border: 3px solid rgba(255, 255, 255, 0.94);
+  box-shadow: 0 0 0 8px rgba(255, 122, 0, 0.16);
+}
+
+.marker-badge {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 14px);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.9);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
 }
 
 </style>

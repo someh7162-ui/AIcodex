@@ -22,6 +22,11 @@
       <text class="guard-text">{{ guardStatusText }}</text>
     </view>
 
+    <view v-if="syncStatusText" class="sync-banner" :class="`sync-${syncStatusTone}`">
+      <text class="sync-title">轨迹同步</text>
+      <text class="sync-text">{{ syncStatusText }}</text>
+    </view>
+
     <view class="stats-grid">
       <view class="stat-card">
         <view class="label">海拔 (m)</view>
@@ -37,6 +42,10 @@
           <text>{{ accuracyText }}</text>
           <view class="status-indicator"></view>
         </view>
+      </view>
+      <view class="stat-card">
+        <view class="label">手机朝向</view>
+        <view class="value compass-value">{{ compassText }}</view>
       </view>
     </view>
 
@@ -92,6 +101,18 @@ defineProps({
   guardStatusLevel: {
     type: String,
     default: 'safe',
+  },
+  compassText: {
+    type: String,
+    default: '方向校准中',
+  },
+  syncStatusText: {
+    type: String,
+    default: '',
+  },
+  syncStatusTone: {
+    type: String,
+    default: 'neutral',
   },
 })
 </script>
@@ -203,6 +224,50 @@ defineProps({
   color: rgba(255, 255, 255, 0.84);
 }
 
+.sync-banner {
+  margin-bottom: 12rpx;
+  padding: 10rpx 14rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sync-banner.sync-syncing {
+  background: rgba(31, 147, 255, 0.12);
+  border-color: rgba(31, 147, 255, 0.24);
+}
+
+.sync-banner.sync-synced {
+  background: rgba(52, 199, 89, 0.12);
+  border-color: rgba(52, 199, 89, 0.22);
+}
+
+.sync-banner.sync-local,
+.sync-banner.sync-warning {
+  background: rgba(255, 149, 0, 0.12);
+  border-color: rgba(255, 149, 0, 0.24);
+}
+
+.sync-title,
+.sync-text {
+  display: block;
+}
+
+.sync-title {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sync-text {
+  flex: 1;
+  font-size: 18rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .coordinates {
   text-align: right;
 }
@@ -271,6 +336,10 @@ defineProps({
       align-items: center;
       justify-content: space-between;
     }
+  }
+
+  .value.compass-value {
+    font-size: 28rpx;
   }
 }
 

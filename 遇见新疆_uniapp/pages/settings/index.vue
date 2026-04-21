@@ -129,12 +129,18 @@ function openEditModal() {
 
 async function saveProfile() {
   const nickname = editNickname.value.trim()
+  console.log('[settings-profile] save start', {
+    nickname,
+    currentNickname: currentUser.value?.nickname || '',
+    hasToken: Boolean(authToken.value),
+  })
   if (!nickname || nickname === currentUser.value?.nickname) {
     editModalVisible.value = false
     return
   }
   try {
     const res = await updateUserProfile(authToken.value, { nickname })
+    console.log('[settings-profile] save success', res)
     const merged = {
       ...currentUser.value,
       ...res.user,
@@ -146,6 +152,7 @@ async function saveProfile() {
     editModalVisible.value = false
     uni.showToast({ title: '昵称已更新', icon: 'success' })
   } catch (e) {
+    console.error('[settings-profile] save fail', e)
     uni.showToast({ title: e.message || '更新失败', icon: 'none' })
   }
 }

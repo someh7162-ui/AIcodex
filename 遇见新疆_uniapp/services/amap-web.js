@@ -1,4 +1,4 @@
-import { AMAP_WEB_KEY, hasAmapKey } from '../config/amap'
+import { AMAP_WEB_KEY, applyAmapSecurityConfig, hasAmapKey } from '../config/amap'
 import { getTiandituLayerConfig } from './tianditu'
 
 const AMAP_JS_URL = 'https://webapi.amap.com/maps'
@@ -29,6 +29,8 @@ export async function loadAmapWebSdk() {
   if (!hasAmapKey()) {
     throw new Error('缺少高德 Web Key，无法加载 AMap JS API')
   }
+
+  applyAmapSecurityConfig(window)
 
   if (window.AMap) {
     return window.AMap

@@ -20,6 +20,8 @@ import { ref, watch } from 'vue'
 import { downloadRemoteFile } from '../common/app-http'
 import { API_ORIGIN } from '../config/api'
 
+const emit = defineEmits(['load', 'error'])
+
 const props = defineProps({
   src: {
     type: String,
@@ -152,16 +154,19 @@ async function resolveImage(url) {
 
 function handleLoad() {
   loading.value = false
+  emit('load', currentSrc.value || props.src)
 }
 
 function handleError() {
   loading.value = false
   if (canUseDirectRemote(props.src)) {
     currentSrc.value = props.src
+    emit('error', props.src)
     return
   }
 
   currentSrc.value = ''
+  emit('error', props.src)
 }
 
 watch(

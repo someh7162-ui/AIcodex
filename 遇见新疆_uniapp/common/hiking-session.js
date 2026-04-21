@@ -1,7 +1,13 @@
 const HIKING_SESSION_KEY = 'meet-xinjiang-hiking-session'
 
-function readSession() {
-  const raw = uni.getStorageSync(HIKING_SESSION_KEY)
+function buildSessionKey(scope = 'guest') {
+  const normalizedScope = String(scope || 'guest').trim() || 'guest'
+  return `${HIKING_SESSION_KEY}:${normalizedScope}`
+}
+
+function readSession(scope = 'guest') {
+  const scopedKey = buildSessionKey(scope)
+  const raw = uni.getStorageSync(scopedKey) || (scope === 'guest' ? uni.getStorageSync(HIKING_SESSION_KEY) : '')
   if (!raw) {
     return null
   }
@@ -14,21 +20,21 @@ function readSession() {
   }
 }
 
-function writeSession(session) {
-  uni.setStorageSync(HIKING_SESSION_KEY, JSON.stringify(session || {}))
+function writeSession(session, scope = 'guest') {
+  uni.setStorageSync(buildSessionKey(scope), JSON.stringify(session || {}))
 }
 
-export function getHikingSession() {
-  return readSession()
+export function getHikingSession(scope) {
+  return readSession(scope)
 }
 
-export function saveHikingSession(session) {
-  writeSession(session)
+export function saveHikingSession(session, scope) {
+  writeSession(session, scope)
   return session
 }
 
-export function updateHikingSessionLocation(location) {
-  const session = readSession() || { points: [] }
+export function updateHikingSessionLocation(location, scope) {
+  const session = readSession(scope) || { points: [] }
   const points = Array.isArray(session.points) ? session.points.slice(-119) : []
 
   points.push({
@@ -54,6 +60,6 @@ export function updateHikingSessionLocation(location) {
     updatedAt: Date.now(),
   }
 
-  writeSession(nextSession)
+  writeSession(nextSession, scope)
   return nextSession
 }

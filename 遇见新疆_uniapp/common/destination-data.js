@@ -16,6 +16,8 @@ function normalizeDestinationImage(value) {
 function createScenicSpot({
   id,
   name,
+  navigationName,
+  navigationAddress,
   location,
   region,
   category,
@@ -34,6 +36,8 @@ function createScenicSpot({
   return {
     id,
     name,
+    navigationName: navigationName || name,
+    navigationAddress: navigationAddress || location,
     location,
     region: normalizeRegion(region),
     category,
@@ -77,12 +81,14 @@ export const destinationList = [
   createScenicSpot({
     id: 1,
     name: '天山天池',
+    navigationName: '天山天池风景区游客中心',
+    navigationAddress: '新疆昌吉回族自治州阜康市天山天池风景名胜区游客中心',
     location: '新疆阜康',
     region: '乌鲁木齐周边',
     category: '湖泊雪山',
     rating: '4.8',
-    longitude: 88.1548,
-    latitude: 43.8803,
+    longitude: 88.1506,
+    latitude: 43.8789,
     description: '高山湖泊与雪岭森林相映成景，是新疆最经典的入门景区之一。',
     image: '/static/destinations/01.jpg',
     weather: { condition: '晴转多云', temperature: '18°C', humidity: '46%', wind: '3级山风' },
@@ -149,6 +155,7 @@ export const destinationList = [
   createScenicSpot({
     id: 5,
     name: '那拉提草原',
+    navigationName: '那拉提旅游风景区',
     location: '新疆伊犁新源',
     region: '伊犁',
     category: '草原森林',
@@ -167,6 +174,7 @@ export const destinationList = [
   createScenicSpot({
     id: 6,
     name: '喀拉峻草原',
+    navigationName: '喀拉峻大草原',
     location: '新疆伊犁特克斯',
     region: '伊犁',
     category: '草原森林',
@@ -203,6 +211,7 @@ export const destinationList = [
   createScenicSpot({
     id: 8,
     name: '禾木景区',
+    navigationName: '禾木风景区',
     location: '新疆阿勒泰布尔津',
     region: '阿勒泰',
     category: '草原森林',
@@ -275,6 +284,7 @@ export const destinationList = [
   createScenicSpot({
     id: 12,
     name: '库车王府',
+    navigationName: '库车王府景区',
     location: '新疆阿克苏库车',
     region: '阿克苏',
     category: '古城人文',
@@ -473,6 +483,7 @@ export const destinationList = [
   createScenicSpot({
     id: 23,
     name: '国际大巴扎',
+    navigationName: '新疆国际大巴扎',
     location: '新疆乌鲁木齐',
     region: '乌鲁木齐',
     category: '城市夜游',
@@ -617,6 +628,7 @@ export const destinationList = [
   createScenicSpot({
     id: 31,
     name: '火焰山景区',
+    navigationName: '吐鲁番火焰山景区',
     location: '新疆吐鲁番',
     region: '吐鲁番',
     category: '沙漠峡谷',
@@ -743,12 +755,14 @@ export const destinationList = [
   createScenicSpot({
     id: 38,
     name: '新疆博物馆',
+    navigationName: '新疆维吾尔自治区博物馆',
+    navigationAddress: '新疆维吾尔自治区乌鲁木齐市沙依巴克区西北路581号',
     location: '新疆乌鲁木齐',
     region: '乌鲁木齐',
     category: '古城人文',
     rating: '4.8',
-    longitude: 87.5923,
-    latitude: 43.8262,
+    longitude: 87.5800,
+    latitude: 43.8221,
     description: '系统展示新疆历史、民族与丝路文明，是入疆后很适合第一站了解背景的地方。',
     image: '/static/destinations/38.jpg',
     weather: { condition: '晴', temperature: '25°C', humidity: '27%', wind: '2级微风' },
@@ -761,6 +775,7 @@ export const destinationList = [
   createScenicSpot({
     id: 39,
     name: '红山公园',
+    navigationName: '乌鲁木齐红山公园',
     location: '新疆乌鲁木齐',
     region: '乌鲁木齐',
     category: '城市夜游',
@@ -1747,25 +1762,188 @@ const destinationSafetyMapMap = {
     emergencyLevel: '中高',
     emergencyContacts: ['景区游客中心', '景区医务点', '阜康当地急救 120'],
     highlights: ['建议把车停在官方停车区后乘摆渡进入', '环湖步道是最适合家庭游客的安全主线'],
+    poiKeywords: ['游客中心', '景区入口', '停车场', '观景台', '医务室'],
+    guideMapSourceName: '项目整理版导览图',
+    guideMapImage: '/static/guide-maps/01-tianchi.jpg',
+    keyPoints: [
+      { id: 'tianchi-center', name: '天池湖滨核心区', keyword: '核心区', longitude: 88.1548, latitude: 43.8803, address: '天池湖滨步道一带' },
+      { id: 'tianchi-visitor', name: '游客中心', keyword: '游客中心', longitude: 88.1506, latitude: 43.8789, address: '天山天池游客服务区' },
+      { id: 'tianchi-view', name: '主观景台', keyword: '观景台', longitude: 88.1592, latitude: 43.8821, address: '天池主观景方向' },
+      { id: 'tianchi-parking', name: '官方停车区', keyword: '停车场', longitude: 88.1478, latitude: 43.8774, address: '主入口停车换乘区域' },
+    ],
+    routePoints: [
+      { longitude: 88.1478, latitude: 43.8774 },
+      { longitude: 88.1506, latitude: 43.8789 },
+      { longitude: 88.1548, latitude: 43.8803 },
+      { longitude: 88.1592, latitude: 43.8821 },
+    ],
   },
   2: {
     coverage: '喀纳斯换乘中心、湖滨观景段、返程车站一线',
     emergencyLevel: '高',
     emergencyContacts: ['景区换乘中心服务台', '景区医疗救助点', '布尔津当地急救 120'],
     highlights: ['景区纵深大，先确认返程车时间', '山区天气变化快，优先保存核心观景路线'],
+    poiKeywords: ['换乘中心', '游客中心', '停车场', '观景台', '医务室'],
+    guideMapSourceName: '项目整理版导览图',
+    guideMapImage: '/static/guide-maps/02-kanas.jpg',
+    keyPoints: [
+      { id: 'kanas-hub', name: '换乘中心', keyword: '换乘中心', longitude: 87.0278, latitude: 48.7084, address: '景区换乘与游客集散区' },
+      { id: 'kanas-lake', name: '喀纳斯湖核心观景区', keyword: '核心区', longitude: 87.0347, latitude: 48.713, address: '湖滨主观景区域' },
+      { id: 'kanas-view', name: '湖滨观景台', keyword: '观景台', longitude: 87.0386, latitude: 48.7161, address: '临湖观景带' },
+      { id: 'kanas-medical', name: '医疗救助点', keyword: '医务室', longitude: 87.0304, latitude: 48.7099, address: '换乘中心附近' },
+    ],
+    routePoints: [
+      { longitude: 87.0278, latitude: 48.7084 },
+      { longitude: 87.0304, latitude: 48.7099 },
+      { longitude: 87.0347, latitude: 48.713 },
+      { longitude: 87.0386, latitude: 48.7161 },
+    ],
+  },
+  3: {
+    coverage: '东门入口、游客服务区、环湖主观景段、返程道路一线',
+    emergencyLevel: '中高',
+    emergencyContacts: ['景区游客中心', '景区医务服务点', '博乐当地急救 120'],
+    highlights: ['环湖线很长，先确认返程方向和补给点', '湖边风力变化快，拍照时不要离主路过远'],
+    poiKeywords: ['游客中心', '东门', '停车场', '观景台', '医务室'],
+    guideMapSourceName: '项目整理版导览图',
+    guideMapImage: '/static/guide-maps/03-sayram.jpg',
+    keyPoints: [
+      { id: 'sailimu-east-gate', name: '东门入口', keyword: '景区入口', longitude: 81.2014, latitude: 44.6002, address: '赛里木湖东门一带' },
+      { id: 'sailimu-visitor', name: '游客服务区', keyword: '游客中心', longitude: 81.2087, latitude: 44.5986, address: '景区主服务区' },
+      { id: 'sailimu-view', name: '湖岸观景带', keyword: '观景台', longitude: 81.2185, latitude: 44.6027, address: '湖滨观景段' },
+      { id: 'sailimu-parking', name: '停车补给点', keyword: '停车场', longitude: 81.2126, latitude: 44.5965, address: '游客服务区附近' },
+    ],
+    routePoints: [
+      { longitude: 81.2014, latitude: 44.6002 },
+      { longitude: 81.2087, latitude: 44.5986 },
+      { longitude: 81.2126, latitude: 44.5965 },
+      { longitude: 81.2185, latitude: 44.6027 },
+    ],
+  },
+  5: {
+    coverage: '主服务区、空中草原线、观景平台、返程停车点一线',
+    emergencyLevel: '中高',
+    emergencyContacts: ['那拉提游客中心', '景区医务服务点', '新源当地急救 120'],
+    highlights: ['草原景区尺度大，建议优先走官方观景车与主栈道', '天气变坏时先回主服务区再决定是否继续深入'],
+    poiKeywords: ['游客中心', '景区入口', '观景台', '停车场', '医务室'],
+    guideMapSourceName: '项目整理版导览图',
+    guideMapImage: '/static/guide-maps/05-nalati.jpg',
+    keyPoints: [
+      { id: 'nalati-visitor', name: '游客中心', keyword: '游客中心', longitude: 83.0489, latitude: 43.4638, address: '那拉提主服务区' },
+      { id: 'nalati-sky-grassland', name: '空中草原核心区', keyword: '核心区', longitude: 83.0565, latitude: 43.4711, address: '空中草原主观景方向' },
+      { id: 'nalati-view', name: '主观景台', keyword: '观景台', longitude: 83.0619, latitude: 43.4744, address: '草原主观景带' },
+      { id: 'nalati-parking', name: '停车换乘区', keyword: '停车场', longitude: 83.0456, latitude: 43.4624, address: '游客中心旁' },
+    ],
+    routePoints: [
+      { longitude: 83.0456, latitude: 43.4624 },
+      { longitude: 83.0489, latitude: 43.4638 },
+      { longitude: 83.0565, latitude: 43.4711 },
+      { longitude: 83.0619, latitude: 43.4744 },
+    ],
   },
   9: {
     coverage: '古城东门、主街区、游客中心、夜游出口一线',
     emergencyLevel: '中',
     emergencyContacts: ['古城游客中心', '古城警务站', '喀什当地急救 120'],
     highlights: ['先记住东门或西门这类大地标', '夜游时建议把集合点设在主街宽阔区域'],
+    poiKeywords: ['游客中心', '东门', '西门', '警务站', '停车场'],
+    guideMapSourceName: '项目整理版导览图',
+    guideMapImage: '/static/guide-maps/09-kashgar-old-city.jpg',
+    keyPoints: [
+      { id: 'kashgar-east-gate', name: '古城东门', keyword: '东门', longitude: 75.9897, latitude: 39.4704, address: '喀什古城东门' },
+      { id: 'kashgar-center', name: '主街核心区', keyword: '核心区', longitude: 75.9879, latitude: 39.4689, address: '主街区漫游核心段' },
+      { id: 'kashgar-west-gate', name: '古城西门', keyword: '西门', longitude: 75.9847, latitude: 39.4681, address: '喀什古城西侧出口' },
+      { id: 'kashgar-police', name: '警务站', keyword: '警务站', longitude: 75.9888, latitude: 39.4697, address: '东门附近安保点' },
+    ],
+    routePoints: [
+      { longitude: 75.9897, latitude: 39.4704 },
+      { longitude: 75.9888, latitude: 39.4697 },
+      { longitude: 75.9879, latitude: 39.4689 },
+      { longitude: 75.9847, latitude: 39.4681 },
+    ],
   },
   22: {
     coverage: '帕米尔主观景点、公路停靠区、游客补给点一线',
     emergencyLevel: '高',
     emergencyContacts: ['沿线游客服务站', '塔县县城医院', '塔县急救 120'],
     highlights: ['高原地区务必控制节奏', '离开县城前先备好离线图和补给'],
+    poiKeywords: ['服务站', '观景台', '停车点', '补给点', '卫生室'],
   },
+}
+
+const guideMapFilenameMap = {
+  1: '01-tianchi.jpg',
+  2: '02-kanas.jpg',
+  3: '03-sayram.jpg',
+  4: '04-baisha-lake.jpg',
+  5: '05-nalati.jpg',
+  6: '06-kalajun.jpg',
+  7: '07-bayinbuluke.jpg',
+  8: '08-hemu.jpg',
+  9: '09-kashgar-old-city.jpg',
+  10: '10-jiaohe.jpg',
+  11: '11-karez.jpg',
+  12: '12-kuqa-palace.jpg',
+  13: '13-kumtag-desert.jpg',
+  14: '14-mysterious-canyon.jpg',
+  15: '15-wuerhe-yardang.jpg',
+  16: '16-taklamakan.jpg',
+  17: '17-zepu-populus.jpg',
+  18: '18-luntai-populus.jpg',
+  19: '19-bosten-lake.jpg',
+  20: '20-keketuohai.jpg',
+  21: '21-jiangbulake.jpg',
+  22: '22-pamir.jpg',
+  23: '23-grand-bazaar.jpg',
+  24: '24-grape-valley.jpg',
+  25: '25-karakul-lake.jpg',
+  26: '26-muztag-glacier.jpg',
+  27: '27-zhaosu-wetland.jpg',
+  28: '28-xiata.jpg',
+  29: '29-tekes.jpg',
+  30: '30-gaochang.jpg',
+  31: '31-flaming-mountain.jpg',
+  32: '32-wensu-canyon.jpg',
+  33: '33-lopnur-village.jpg',
+  34: '34-swan-river.jpg',
+  35: '35-dukou-north.jpg',
+  36: '36-anjihai-canyon.jpg',
+  37: '37-wusun-trail.jpg',
+  38: '38-xinjiang-museum.jpg',
+  39: '39-hongshan-park.jpg',
+  40: '40-dabancheng.jpg',
+  41: '41-guozigou-bridge.jpg',
+  42: '42-huocheng-lavender.jpg',
+  43: '43-qiongkushitai.jpg',
+  44: '44-tangbula.jpg',
+  45: '45-ulungur-lake.jpg',
+  46: '46-wucaitan.jpg',
+  47: '47-baihaba.jpg',
+  48: '48-mulei-populus.jpg',
+  49: '49-tianshan-canyon.jpg',
+  50: '50-nanshan-pasture.jpg',
+  51: '51-bogda-view.jpg',
+  52: '52-mutetaar-desert.jpg',
+  53: '53-niya-ruins.jpg',
+  54: '54-hotan-old-town.jpg',
+  55: '55-bole-wetland.jpg',
+  56: '56-jinghe-populus.jpg',
+  57: '57-kizil-grottoes.jpg',
+  58: '58-tomur-canyon.jpg',
+  59: '59-tarim-populus.jpg',
+  60: '60-tahe-source.jpg',
+  61: '61-baiyanggou.jpg',
+  62: '62-manas-wetland.jpg',
+  63: '63-junggar-stele.jpg',
+  64: '64-tuyugou.jpg',
+  65: '65-huiyuan-old-city.jpg',
+  66: '66-jingyuan-temple.jpg',
+  67: '67-aksu-confucius-temple.jpg',
+}
+
+function getDefaultGuideMapImage(id) {
+  const fileName = guideMapFilenameMap[Number(id)]
+  return fileName ? `/static/guide-maps/${fileName}` : ''
 }
 
 export function getDestinationById(id) {
@@ -1927,6 +2105,12 @@ export function getDestinationSafetyMap(id) {
     safeRoute: customConfig.safeRoute || categoryConfig.safeRoute,
     servicePoints: customConfig.servicePoints || categoryConfig.servicePoints,
     emergencyContacts: customConfig.emergencyContacts || ['景区游客中心', '当地急救 120', '公安报警 110'],
+    poiKeywords: customConfig.poiKeywords || ['游客中心', '景区入口', '停车场', '观景台', '服务点'],
+    keyPoints: customConfig.keyPoints || [],
+    routePoints: customConfig.routePoints || [],
+    guideMapSourceName: customConfig.guideMapSourceName || '',
+    guideMapSourceUrl: customConfig.guideMapSourceUrl || '',
+    guideMapImage: customConfig.guideMapImage || getDefaultGuideMapImage(destination.id),
     highlights: customConfig.highlights || [
       '建议在景区入口处先确认返程路线。',
       '弱网区域优先依赖离线安全图和景区指示牌。',
@@ -1937,4 +2121,17 @@ export function getDestinationSafetyMap(id) {
 
 export function getDouyinSearchUrl(keyword) {
   return `https://www.douyin.com/search/${encodeURIComponent(keyword)}?type=live`
+}
+
+export function getDouyinAppSearchUrls(keyword) {
+  const encodedKeyword = encodeURIComponent(String(keyword || '').trim())
+  if (!encodedKeyword) {
+    return []
+  }
+
+  return [
+    `snssdk1128://search?keyword=${encodedKeyword}&from=app`,
+    `snssdk2329://search?keyword=${encodedKeyword}&from=app`,
+    `douyin://search?keyword=${encodedKeyword}`,
+  ]
 }

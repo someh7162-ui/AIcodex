@@ -42,6 +42,7 @@ function normalizeGuide(item = {}, index = 0) {
 
   return {
     id: item.id,
+    destinationId: item.destinationId ? Number(item.destinationId) : null,
     title: item.title,
     category: item.category || '旅行分享',
     readTime: item.readTime || '3 分钟阅读',

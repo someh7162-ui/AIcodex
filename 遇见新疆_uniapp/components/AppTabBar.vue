@@ -52,7 +52,7 @@ function go(path) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14rpx 16rpx;
+  padding: 14rpx 12rpx;
   border-radius: 32rpx;
 }
 
@@ -71,7 +71,7 @@ function go(path) {
 }
 
 .tab-label {
-  font-size: 24rpx;
+  font-size: 22rpx;
   font-weight: 600;
   white-space: nowrap;
 }

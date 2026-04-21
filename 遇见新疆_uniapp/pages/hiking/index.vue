@@ -8,6 +8,7 @@
       :altitude-text="altitudeText"
       :distance-text="distanceText"
       :accuracy-text="accuracyText"
+      :compass-text="compassText"
       :is-offline="isOffline"
       :mode-text="headerModeText"
       :sunset-countdown-text="sunsetCountdownText"
@@ -15,6 +16,8 @@
       :sunset-risk-level="sunsetRiskLevel"
       :guard-status-text="guardStatusText"
       :guard-status-level="guardStatusLevel"
+      :sync-status-text="trackSyncText"
+      :sync-status-tone="trackSyncTone"
     />
 
     <HikingMapStage
@@ -22,6 +25,8 @@
       :map-mode-key="currentMapMode"
       :is-offline="isOffline"
       :offline-hint="offlineHint"
+      :overlay-active="isSosMenuOpen"
+      :offline-pack-id="offlinePackId"
       @refresh="refreshLocation"
       @recenter="recenterMap"
       @toggle-track="handleStart"
@@ -31,15 +36,20 @@
 
     <HikingBottomControls
       :is-tracking="isTracking"
+      :has-track-session="hasTrackInProgress"
       :has-track-points="Boolean(trackPoints.length)"
       :is-guard-mode="isGuardMode"
       :emergency-contact-name="emergencyContactName"
       :emergency-contact-phones="emergencyContactPhones"
+      :offline-pack-action-text="offlinePackActionText"
+      :offline-pack-busy="offlinePackBusy"
       @sos-message="handleEmergencySms"
+      @sos-visibility-change="handleSosVisibilityChange"
       @toggle-track="handleStart"
       @finish-track="handleFinishTrack"
       @clear-track="handleClearTrack"
       @toggle-guard="toggleGuard"
+      @offline-pack-action="handleOfflinePackAction"
     />
   </view>
 </template>
@@ -55,15 +65,23 @@ import { evaluateStationaryRisk, formatStationaryStatus } from '../../common/hik
 import { hikingModeMock } from '../../common/hiking-mode'
 import { formatSunsetTime, getSunsetInfo } from '../../common/sun-times'
 import {
+  buildHikingTilePackPlan,
+  DEFAULT_HIKING_TILE_PACK_ID,
+  deleteOfflineTilePack,
+  downloadOfflineTilePack,
+  getOfflineTilePack,
+} from '../../common/offline-tile-packs'
+import {
   formatCoordinate,
   formatMetric,
   sumTrackDistanceKm,
 } from '../../common/hiking-metrics'
 import { openAppPermissionSettings } from '../../services/amap'
+import { formatCompassHeading, startCompass, stopCompass, subscribeCompass } from '../../services/compass'
 import { useHikingStore } from '../../stores/useHikingStore'
 
 const MAP_MODES = [
-  { key: 'satellite', label: '高德卫星图' },
+  { key: 'normal', label: '高德标准图' },
 ]
 const MIN_MAP_SCALE = 12
 const MAX_MAP_SCALE = 18
@@ -72,12 +90,16 @@ const RECENTER_MAP_SCALE = 16
 const hikingStore = useHikingStore()
 const {
   isTracking,
+  hasTrackInProgress,
   currentLocation,
   trackPoints,
   locationError,
+  trackSyncText,
+  trackSyncTone,
 } = storeToRefs(hikingStore)
 
 const isGuardMode = ref(false)
+const isSosMenuOpen = ref(false)
 const mapScale = ref(15)
 const currentMapMode = ref(MAP_MODES[0].key)
 const networkOnline = ref(true)
@@ -88,7 +110,13 @@ const lastGuardSafeAt = ref(0)
 const lastSunsetWarningLevel = ref(0)
 const lastSunsetWarningDate = ref('')
 let sunsetTimer = null
+let removeCompassListener = null
 let hasPromptedLocationSettings = false
+const offlinePackId = DEFAULT_HIKING_TILE_PACK_ID
+const compassHeading = ref(NaN)
+const offlinePackRecord = ref(getOfflineTilePack(offlinePackId))
+const offlinePackBusy = ref(false)
+const offlinePackProgress = ref(0)
 const coordinateText = computed(() => {
   if (!currentLocation.value) {
     return locationError.value || '等待定位'
@@ -118,6 +146,13 @@ const altitudeText = computed(() => formatMetric(currentLocation.value?.altitude
 const accuracyText = computed(() => formatMetric(currentLocation.value?.accuracy, 0))
 const isOffline = computed(() => !networkOnline.value)
 const distanceText = computed(() => sumTrackDistanceKm(trackPoints.value).toFixed(2))
+const compassText = computed(() => {
+  if (Number.isFinite(compassHeading.value)) {
+    return formatCompassHeading(compassHeading.value)
+  }
+  const bearing = Number(currentLocation.value?.bearing || 0)
+  return bearing > 0 ? `${formatCompassHeading(bearing)} · 行进方向` : '方向校准中'
+})
 const mapModeLabel = computed(() => MAP_MODES.find((item) => item.key === currentMapMode.value)?.label || '标准地图')
 const headerModeText = computed(() => `${isOffline.value ? '离线' : '在线'} · ${mapModeLabel.value}`)
 const sunsetInfo = computed(() => getSunsetInfo(currentLocation.value, new Date(nowTick.value)))
@@ -176,15 +211,41 @@ const emergencyContactPhones = computed(() => {
   return [emergency.primaryPhone, emergency.backupPhone].filter(Boolean)
 })
 const offlineHint = computed(() => {
+  const packReady = offlinePackRecord.value?.status === 'ready'
   if (isOffline.value) {
-    return '离线时仍可继续使用 GPS 定位，但高德卫星图需要联网加载。'
+    return packReady
+      ? '当前优先读取已下载的离线瓦片包，断网后仍可继续查看路线与当前位置。'
+      : '离线时仍可继续使用 GPS 定位，但未下载离线瓦片包时底图可能无法显示。'
   }
 
-  return '当前使用高德卫星图显示徒步位置与轨迹。'
+  return packReady
+    ? '当前使用高德标准地图；断网后可自动切换到本地离线瓦片包。'
+    : '当前使用高德标准地图显示徒步位置与轨迹。'
 })
+const offlinePackActionText = computed(() => {
+  if (offlinePackBusy.value) {
+    const progress = Math.round(Number(offlinePackProgress.value || 0))
+    return progress > 0 ? `下载离线底图 ${progress}%` : '准备离线底图...'
+  }
+  const pack = offlinePackRecord.value
+  return pack?.status === 'ready' ? '管理离线底图' : '下载离线底图'
+})
+
+function resolveOfflineDownloadMode() {
+  if (currentMapMode.value === 'terrain') {
+    return 'terrain'
+  }
+  if (currentMapMode.value === 'normal') {
+    return 'vector'
+  }
+  return 'imagery'
+}
 
 onLoad(async () => {
   hikingStore.hydrate()
+  hikingStore.loadSavedTracks().catch(() => {})
+  syncOfflinePackState()
+  bindCompassState()
   bindNetworkState()
   startSunsetTimer()
   if (!currentLocation.value) {
@@ -280,7 +341,7 @@ function bindNetworkState() {
 
 async function refreshLocation() {
   try {
-    const location = await hikingStore.refreshLocation({
+    await hikingStore.refreshLocation({
       preferGpsWhenOffline: isOffline.value,
       appendWhenTracking: isTracking.value,
     })
@@ -295,14 +356,15 @@ async function handleStart() {
     if (isTracking.value) {
       await hikingStore.stopTracking()
       uni.showToast({
-        title: '暂停追踪',
+        title: '已暂停记录',
         icon: 'none',
       })
     } else {
+      const resumeTrack = hasTrackInProgress.value
       await hikingStore.startTracking()
       await refreshLocation()
       uni.showToast({
-        title: '开始追踪',
+        title: resumeTrack ? '继续记录' : '开始记录',
         icon: 'none',
       })
     }
@@ -316,13 +378,19 @@ async function handleStart() {
 }
 
 async function handleFinishTrack() {
-  if (!isTracking.value) {
+  if (!hasTrackInProgress.value || trackPoints.value.length < 2) {
+    uni.showToast({
+      title: '至少记录两个有效点后再结束',
+      icon: 'none',
+    })
     return
   }
 
   uni.showModal({
     title: '结束并保存轨迹',
-    content: '长按后将结束本次徒步记录，并把轨迹保存到发布页可选列表。',
+    content: isTracking.value
+      ? '结束后会停止本次记录，并把分段轨迹保存到发布页可选列表。'
+      : '会把当前暂停中的分段轨迹保存到发布页可选列表。',
     confirmText: '结束保存',
     cancelText: '继续记录',
     success: async ({ confirm }) => {
@@ -389,10 +457,7 @@ function handleClearTrack() {
 
 async function recenterMap() {
   mapScale.value = RECENTER_MAP_SCALE
-  if (!currentLocation.value) {
-    await refreshLocation()
-    return
-  }
+  await refreshLocation()
 
   uni.showToast({
     title: '已回到当前位置',
@@ -488,6 +553,10 @@ function handleEmergencySms() {
   })
 }
 
+function handleSosVisibilityChange(value) {
+  isSosMenuOpen.value = Boolean(value)
+}
+
 function toggleGuard() {
   isGuardMode.value = !isGuardMode.value
   if (isGuardMode.value) {
@@ -504,6 +573,138 @@ function cleanup() {
     clearInterval(sunsetTimer)
     sunsetTimer = null
   }
+  if (removeCompassListener) {
+    removeCompassListener()
+    removeCompassListener = null
+  }
+  stopCompass().catch(() => {})
+}
+
+function bindCompassState() {
+  if (!removeCompassListener) {
+    removeCompassListener = subscribeCompass((payload) => {
+      compassHeading.value = Number(payload?.heading)
+    })
+  }
+
+  startCompass().catch(() => {})
+}
+
+function syncOfflinePackState() {
+  offlinePackRecord.value = getOfflineTilePack(offlinePackId)
+  if (!offlinePackBusy.value) {
+    offlinePackProgress.value = Number(offlinePackRecord.value?.progress || 0)
+  }
+}
+
+async function handleOfflinePackAction() {
+  if (offlinePackBusy.value) {
+    return
+  }
+
+  syncOfflinePackState()
+  if (offlinePackRecord.value?.status === 'ready') {
+    openOfflinePackManager()
+    return
+  }
+
+  await startOfflinePackDownload()
+}
+
+function openOfflinePackManager() {
+  const pack = offlinePackRecord.value
+  const sizeText = Number(pack?.sizeBytes) > 0 ? `，约 ${formatPackSize(pack.sizeBytes)}` : ''
+  uni.showActionSheet({
+    itemList: [`重新下载离线底图${sizeText}`, '删除离线底图'],
+    success: async ({ tapIndex }) => {
+      if (tapIndex === 0) {
+        await startOfflinePackDownload(true)
+      }
+      if (tapIndex === 1) {
+        await confirmDeleteOfflinePack()
+      }
+    },
+  })
+}
+
+async function startOfflinePackDownload(force = false) {
+  if (!currentLocation.value && !trackPoints.value.length) {
+    uni.showToast({ title: '请先等待定位成功', icon: 'none' })
+    return
+  }
+
+  offlinePackBusy.value = true
+  offlinePackProgress.value = 0
+
+  try {
+    if (force && offlinePackRecord.value?.status === 'ready') {
+      await deleteOfflineTilePack(offlinePackId)
+    }
+
+    const plan = buildHikingTilePackPlan({
+      packId: offlinePackId,
+      name: '徒步当前区域离线底图',
+      points: trackPoints.value,
+      center: currentLocation.value,
+      minZoom: 12,
+      maxZoom: 16,
+      mode: resolveOfflineDownloadMode(),
+      paddingKm: 2.2,
+    })
+
+    await downloadOfflineTilePack(plan, {
+      concurrency: 4,
+      onProgress: ({ progress }) => {
+        offlinePackProgress.value = progress
+      },
+    })
+
+    syncOfflinePackState()
+    uni.showToast({ title: '离线底图已下载', icon: 'none' })
+  } catch (error) {
+    syncOfflinePackState()
+    uni.showModal({
+      title: '下载失败',
+      content: error?.message || '离线底图下载失败，请稍后重试。',
+      showCancel: false,
+    })
+  } finally {
+    offlinePackBusy.value = false
+  }
+}
+
+function confirmDeleteOfflinePack() {
+  uni.showModal({
+    title: '删除离线底图',
+    content: '确认删除当前徒步区域离线底图吗？删除后断网将无法显示本地瓦片。',
+    success: async ({ confirm }) => {
+      if (!confirm) {
+        return
+      }
+      try {
+        await deleteOfflineTilePack(offlinePackId)
+        syncOfflinePackState()
+        uni.showToast({ title: '已删除离线底图', icon: 'none' })
+      } catch (error) {
+        uni.showToast({
+          title: error?.message || '删除失败',
+          icon: 'none',
+          duration: 2500,
+        })
+      }
+    },
+  })
+}
+
+function formatPackSize(bytes) {
+  const size = Number(bytes || 0)
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)}MB`
+  }
+  if (size >= 1024) {
+    return `${Math.round(size / 1024)}KB`
+  }
+  return `${size}B`
 }
 
 function startSunsetTimer() {

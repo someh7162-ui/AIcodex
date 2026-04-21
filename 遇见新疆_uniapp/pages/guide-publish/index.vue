@@ -88,6 +88,22 @@
         />
       </view>
 
+      <view class="form-card scenic-card">
+        <view class="section-head">
+          <text class="field-label no-gap">关联景区</text>
+          <text class="section-tip">选中后会保存景区 ID，景区详情页能更精准显示这条攻略</text>
+        </view>
+        <picker :range="destinationPickerOptions" range-key="label" @change="handleDestinationChange">
+          <view class="scenic-picker-row">
+            <view>
+              <text class="scenic-picker-value">{{ selectedDestinationLabel }}</text>
+              <text class="scenic-picker-hint muted-text">{{ selectedDestinationHint }}</text>
+            </view>
+            <text class="scenic-picker-arrow">›</text>
+          </view>
+        </picker>
+      </view>
+
       <view class="form-card media-card">
         <view class="media-icon-row">
           <view class="media-icon-btn" @tap="pickMedia">
@@ -154,7 +170,7 @@
         </view>
         <view v-else class="track-empty">
           <text class="track-empty-title">还没有可附带的轨迹</text>
-          <text class="track-empty-desc">先去徒步模式记录一段路线，返回这里就能选择附带。</text>
+          <text class="track-empty-desc">{{ trackEmptyText }}</text>
         </view>
       </view>
 
@@ -209,6 +225,7 @@ import { getStoredAuthToken, getStoredAuthUser } from '../../common/auth-storage
 import { createGuideTrackPayload, formatTrackDuration } from '../../common/guide-track'
 import { sumTrackDistanceKm } from '../../common/hiking-metrics'
 import { addPublishedGuide, defaultCoverOptions, persistGuideImages, persistLocalFile } from '../../common/published-guides'
+import { destinationList, getDestinationById } from '../../common/destination-data'
 import { getCurrentLocation, getNearbyLocationOptions, reverseGeocode } from '../../services/amap'
 import { createGuide, hasGuideApi, uploadGuideMedia } from '../../services/guides'
 import { useHikingStore } from '../../stores/useHikingStore'
@@ -223,7 +240,7 @@ const locationOptionsLoading = ref(false)
 const locationOptions = ref([])
 const publishForm = reactive(createDefaultPublishForm())
 const hikingStore = useHikingStore()
-const { trackPoints, isTracking, savedTracks } = storeToRefs(hikingStore)
+const { trackPoints, isTracking, savedTracks, savedTracksLoading } = storeToRefs(hikingStore)
 
 const systemInfo = typeof uni.getSystemInfoSync === 'function' ? uni.getSystemInfoSync() : {}
 const statusBarHeight = systemInfo.statusBarHeight || 20
@@ -250,6 +267,23 @@ const derivedSubCategory = computed(() => inferSubCategory({
   tagText: publishForm.tagText,
   contentType: derivedContentType.value,
 }))
+const destinationPickerOptions = computed(() => [
+  { id: '', label: '暂不关联景区', hint: '保留为普通攻略' },
+  ...destinationList.map((item) => ({
+    id: String(item.id),
+    label: item.name,
+    hint: `${item.location} · ${item.category}`,
+  })),
+])
+const selectedDestination = computed(() => getDestinationById(publishForm.destinationId))
+const selectedDestinationLabel = computed(() => selectedDestination.value?.name || '选择要关联的景区')
+const selectedDestinationHint = computed(() => {
+  if (selectedDestination.value) {
+    return `${selectedDestination.value.location} · ${selectedDestination.value.category}`
+  }
+
+  return '不选也能发布；选了以后景区详情页会优先精准展示'
+})
 const locationTagText = computed(() => publishForm.locationTag || '新疆同城')
 const mediaSummary = computed(() => {
   if (publishForm.video) {
@@ -326,6 +360,12 @@ const trackSummaryText = computed(() => {
   const selected = availableTracks.value.find((item) => item.id === publishForm.selectedTrackId)
   return selected?.summary || summarizeTrack(track, '已保存')
 })
+const trackEmptyText = computed(() => {
+  if (savedTracksLoading.value) {
+    return '正在同步当前账号的徒步轨迹，请稍候。'
+  }
+  return '先去徒步模式记录并保存路线，返回这里就能选择附带。'
+})
 
 onLoad(() => {
   if (!currentUser.value) {
@@ -341,6 +381,7 @@ onLoad(() => {
   }
 
   hikingStore.hydrate()
+  hikingStore.loadSavedTracks().catch(() => {})
   syncTrackSelection()
   loadCurrentLocation()
   setTimeout(() => {
@@ -360,6 +401,7 @@ function createDefaultPublishForm() {
     title: '',
     excerpt: '',
     tagText: '',
+    destinationId: '',
     locationTag: '',
     locationLatitude: null,
     locationLongitude: null,
@@ -493,6 +535,19 @@ function closeLocationPicker() {
 function selectLocationOption(option) {
   publishForm.locationTag = option?.value || publishForm.locationTag
   closeLocationPicker()
+}
+
+function handleDestinationChange(event) {
+  const selectedIndex = Number(event?.detail?.value || 0)
+  const option = destinationPickerOptions.value[selectedIndex]
+  publishForm.destinationId = option?.id || ''
+
+  if (publishForm.destinationId) {
+    const destination = getDestinationById(publishForm.destinationId)
+    if (destination) {
+      publishForm.locationTag = destination.name
+    }
+  }
 }
 
 function locationSourceText(source) {
@@ -640,6 +695,7 @@ async function submitPublishedGuide() {
     const summaryText = publishForm.excerpt.trim() || (highlights.length ? `#${highlights.join(' #')}` : '来自新疆旅途中的一条真实笔记。')
     const attachedTrack = publishForm.attachHikingTrack ? attachableTrack.value : null
     const guidePayload = {
+      destinationId: publishForm.destinationId ? Number(publishForm.destinationId) : undefined,
       title: publishForm.title.trim(),
       excerpt: summaryText,
       summary: summaryText,
@@ -745,6 +801,34 @@ function validatePublishedGuide() {
   justify-content: center;
   font-size: 24rpx;
   line-height: 1;
+}
+
+.scenic-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 24rpx 0 6rpx;
+}
+
+.scenic-picker-value {
+  display: block;
+  font-size: 28rpx;
+  color: $theme-text;
+  font-weight: 600;
+}
+
+.scenic-picker-hint {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+}
+
+.scenic-picker-arrow {
+  flex-shrink: 0;
+  font-size: 40rpx;
+  color: $theme-muted;
 }
 
 .submit-btn,

@@ -16,7 +16,12 @@
       </view>
 
       <view class="section section-block">
-        <text class="section-title">景区介绍</text>
+        <view class="section-head-row">
+          <text class="section-title">景区介绍</text>
+          <view v-if="hasExtendedCulture" class="section-toggle-chip" @tap="introExpanded = !introExpanded">
+            {{ introExpanded ? '收起' : '展开更多' }}
+          </view>
+        </view>
         <view class="story-card card">
           <view class="travel-meta-grid">
             <view class="travel-meta-item">
@@ -46,26 +51,90 @@
             <text class="story-label">景区概览</text>
             <text class="story-text">{{ destinationCulture.overview }}</text>
           </view>
-          <view class="story-row">
+          <view v-if="introExpanded" class="story-row">
             <text class="story-label">历史由来</text>
             <text class="story-text">{{ destinationCulture.history }}</text>
           </view>
-          <view class="story-row last-row">
+          <view v-if="introExpanded" class="story-row last-row">
             <text class="story-label">值得了解</text>
             <text class="story-text">{{ destinationCulture.highlights }}</text>
           </view>
         </view>
       </view>
 
+      <view v-if="relatedGuidesVisible" class="section section-block">
+        <view class="section-head-row">
+          <text class="section-title">相关攻略</text>
+          <view v-if="relatedGuides.length > 2" class="section-toggle-chip" @tap="showAllRelatedGuides = !showAllRelatedGuides">
+            {{ showAllRelatedGuides ? '收起' : `展开全部 ${relatedGuides.length} 条` }}
+          </view>
+        </view>
+        <view class="related-guides-card card">
+          <view class="related-guides-head">
+            <view>
+              <text class="map-title">来自攻略指南的相关内容</text>
+              <text class="map-subtitle muted-text">进入景区详情后，这里会自动匹配所有用户发布的相关攻略，方便你直接继续看别人的实地经验。</text>
+            </view>
+            <view v-if="relatedGuidesLoading" class="offline-status">加载中</view>
+          </view>
+
+          <view v-if="relatedGuides.length" class="related-guides-list">
+            <view v-for="guide in visibleRelatedGuides" :key="guide.id" class="related-guide-item card-lite" @tap="openRelatedGuide(guide.id)">
+              <view class="related-guide-cover">
+                <CachedImage v-if="guide.image" :src="guide.image" image-class="cover-image" />
+                <view v-else class="related-guide-cover-fallback">
+                  <text>攻略</text>
+                </view>
+              </view>
+              <view class="related-guide-body">
+                <text class="related-guide-title">{{ guide.title }}</text>
+                <text class="related-guide-meta muted-text">{{ guide.nickname || guide.author }} · {{ guide.locationTag || guide.location || '新疆同城' }}</text>
+                <text class="related-guide-summary muted-text">{{ guide.excerpt || guide.summaryText || '这条攻略还没有补充摘要，点进去看完整内容。' }}</text>
+                <view class="related-guide-foot">
+                  <text class="related-guide-stat">{{ guide.contentType || '图文' }}</text>
+                  <text class="related-guide-stat">{{ guide.publishDate || '' }}</text>
+                </view>
+              </view>
+            </view>
+            <view v-if="relatedGuides.length > 2" class="list-toggle-inline" @tap="showAllRelatedGuides = !showAllRelatedGuides">
+              {{ showAllRelatedGuides ? '收起相关攻略' : '查看更多相关攻略' }}
+            </view>
+          </view>
+
+          <view v-else-if="relatedGuidesError" class="map-fallback">
+            <text class="map-fallback-title">相关攻略加载失败</text>
+            <text class="map-fallback-desc muted-text">{{ relatedGuidesError }}</text>
+          </view>
+
+          <view v-else class="map-fallback">
+            <text class="map-fallback-title">暂时没有相关攻略</text>
+            <text class="map-fallback-desc muted-text">等用户发布包含这个景区名称或相关地点标签的攻略后，这里会自动显示。</text>
+          </view>
+        </view>
+      </view>
+
       <view class="section section-block">
-        <text class="section-title">地图与定位</text>
+        <text class="section-title">路线与天气</text>
         <view class="map-card card">
           <view class="map-head">
             <view>
-              <text class="map-title">景区位置与导航</text>
-              <text class="map-subtitle muted-text">展示景区地图位置，并可估算当前出发的时间和距离</text>
+              <text class="map-title">景区位置、路线与天气</text>
+              <text class="map-subtitle muted-text">把导航距离、出发方式和当地天气合并到一块，出发前先看这一屏就够了。</text>
             </view>
             <view class="map-status" :class="{ ready: locationReady }">{{ locationStatusText }}</view>
+          </view>
+
+          <view class="travel-overview-grid">
+            <view class="travel-overview-card card-lite">
+              <text class="travel-overview-label">当前天气</text>
+              <text class="travel-overview-value weather-emphasis">{{ liveWeather.temperature }}</text>
+              <text class="travel-overview-sub muted-text">{{ liveWeather.condition }}</text>
+            </view>
+            <view class="travel-overview-card card-lite">
+              <text class="travel-overview-label">空气湿度</text>
+              <text class="travel-overview-value">{{ liveWeather.humidity }}</text>
+              <text class="travel-overview-sub muted-text">风力 {{ liveWeather.wind }}</text>
+            </view>
           </view>
 
           <view class="location-meta">
@@ -113,16 +182,24 @@
             <view class="primary-btn" @tap="openScenicLocation">地图导航</view>
             <view class="secondary-btn" @tap="refreshLocationAndWeather">刷新路线</view>
           </view>
+
+          <text v-if="weatherError" class="weather-note travel-weather-note">{{ weatherError }}</text>
+          <text v-else-if="!hasRealWeather" class="weather-note travel-weather-note">当前显示的是本地预设天气，填入高德 Key 后会自动切换为实时天气。</text>
         </view>
       </view>
 
       <view class="section section-block">
-        <text class="section-title">安全保障</text>
+        <view class="section-head-row">
+          <text class="section-title">导览攻略</text>
+          <view class="section-toggle-chip guide-chip" @tap="guideExpanded = !guideExpanded">
+            {{ guideExpanded ? '收起' : '展开' }}
+          </view>
+        </view>
         <view class="safety-card card">
           <view class="safety-head">
             <view>
-              <text class="map-title">离线地图与应急提醒</text>
-              <text class="map-subtitle muted-text">进入山区、峡谷或高原前，建议先把景区离线地图下载到本地，弱网时也能快速查看位置参考。</text>
+              <text class="map-title">景区导览攻略图</text>
+              <text class="map-subtitle muted-text">详情页直接看导览图，点图可放大，完整信息放到展开区和导览页里。</text>
             </view>
             <view class="offline-status" :class="{ ready: hasOfflineMap }">{{ offlineMapStatusText }}</view>
           </view>
@@ -133,17 +210,41 @@
               <text class="travel-meta-value">{{ destinationSafetyMap.coverage }}</text>
             </view>
             <view class="travel-meta-item">
-              <text class="travel-meta-label">安全等级</text>
+              <text class="travel-meta-label">攻略强度</text>
               <text class="travel-meta-value">{{ destinationSafetyMap.emergencyLevel }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">本地状态</text>
+              <text class="travel-meta-value">{{ offlineMapLocalStatusShort }}</text>
+            </view>
+            <view class="travel-meta-item">
+              <text class="travel-meta-label">离线资源</text>
+              <text class="travel-meta-value">{{ offlineMapSupportShort }}</text>
             </view>
           </view>
 
-          <view class="safety-map-preview">
-            <CachedImage :src="safetyMapImageUrl" image-class="cover-image" />
-            <view class="safety-map-badge">景区核心安全参考图</view>
+          <view v-if="displayGuideImageUrl" class="safety-map-preview" @tap="previewGuideImage">
+            <CachedImage
+              :src="displayGuideImageUrl"
+              image-class="cover-image guide-preview-image"
+              mode="aspectFit"
+              :fallback-to-remote="false"
+              @error="handleGuideImageError"
+              @load="handleGuideImageLoad"
+            />
+            <view class="safety-map-badge">点击放大查看导览图</view>
+          </view>
+          <view v-else class="map-fallback">
+            <text class="map-fallback-title">暂无景区导览图</text>
+            <text class="map-fallback-desc muted-text">请把对应景区导览图放进 `static/guide-maps`，页面会自动尝试同名不同后缀并优先读取本地离线图。</text>
           </view>
 
-          <view class="offline-meta-grid compact-grid">
+          <view v-if="guideExpanded" class="safety-legend card-lite">
+            <text class="safety-item-title">导览重点</text>
+            <text class="safety-item-desc muted-text">{{ destinationSafetyMap.highlights.join('；') }}</text>
+          </view>
+
+          <view v-if="guideExpanded" class="offline-meta-grid compact-grid guide-detail-grid">
             <view class="travel-meta-item">
               <text class="travel-meta-label">离线资源</text>
               <text class="travel-meta-value">{{ offlineMapSupportText }}</text>
@@ -154,61 +255,43 @@
             </view>
           </view>
 
-          <view class="safety-legend card-lite">
-            <text class="safety-item-title">安全图重点</text>
-            <text class="safety-item-desc muted-text">{{ destinationSafetyMap.highlights.join('；') }}</text>
-          </view>
-
-          <view class="safety-list">
-            <view v-for="item in safetyTips" :key="item.title" class="safety-item card-lite">
+          <view class="safety-list compact-safety-list">
+            <view v-for="item in visibleSafetyTips" :key="item.title" class="safety-item card-lite compact-safety-item">
               <text class="safety-item-title">{{ item.title }}</text>
               <text class="safety-item-desc muted-text">{{ item.desc }}</text>
             </view>
           </view>
 
-          <view class="map-actions safety-actions">
-            <view class="primary-btn" @tap="openSafetyMapPage">查看完整安全图</view>
-            <view class="primary-btn" :class="{ disabled: offlineMapBusy || !offlineMapAvailable }" @tap="handleOfflineMapDownload">
-              {{ offlineMapButtonText }}
-            </view>
-            <view class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="openOfflineMap">打开离线安全图</view>
-            <view class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="deleteOfflineMapWithConfirm">删除离线地图</view>
+          <view v-if="safetyTips.length > 2" class="list-toggle-inline" @tap="guideExpanded = !guideExpanded">
+            {{ guideExpanded ? '收起导览提醒' : `查看更多导览提醒 ${safetyTips.length} 条` }}
           </view>
-        </view>
+
+          <view class="map-actions guide-actions">
+             <view class="primary-btn" @tap="openSafetyMapPage">完整导览页</view>
+             <view class="primary-btn" :class="{ disabled: offlineMapBusy || !offlineMapAvailable }" @tap="handleOfflineMapDownload">
+                {{ offlineMapButtonText }}
+              </view>
+             <view v-if="guideExpanded" class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="openOfflineMap">打开离线图</view>
+             <view v-if="guideExpanded" class="secondary-btn" :class="{ disabled: !hasOfflineMap }" @tap="deleteOfflineMapWithConfirm">删除离线图</view>
+            </view>
+         </view>
       </view>
 
       <view class="section section-block">
-        <text class="section-title">当地天气</text>
-        <view class="weather-card card">
-          <view class="weather-main">
-            <text class="weather-temp">{{ liveWeather.temperature }}</text>
-            <view class="weather-texts">
-              <text class="weather-condition">{{ liveWeather.condition }}</text>
-              <text class="muted-text">{{ weatherSourceText }}</text>
-            </view>
+        <view class="section-head-row">
+          <text class="section-title">游玩建议</text>
+          <view class="section-toggle-chip" @tap="tipsExpanded = !tipsExpanded">
+            {{ tipsExpanded ? '收起' : '展开' }}
           </view>
-          <view class="weather-grid">
-            <view class="weather-item">
-              <text class="weather-label">湿度</text>
-              <text class="weather-value">{{ liveWeather.humidity }}</text>
-            </view>
-            <view class="weather-item">
-              <text class="weather-label">风力</text>
-              <text class="weather-value">{{ liveWeather.wind }}</text>
-            </view>
-          </view>
-          <text v-if="weatherError" class="weather-note">{{ weatherError }}</text>
-          <text v-else-if="!hasRealWeather" class="weather-note">当前显示的是本地预设天气，填入高德 Key 后会自动切换为实时天气。</text>
         </view>
-      </view>
-
-      <view class="section section-block">
-        <text class="section-title">游玩建议</text>
         <view class="tips-list">
-          <view v-for="tip in destination.tips" :key="tip" class="tip-card card">
+          <view v-for="tip in visibleDestinationTips" :key="tip" class="tip-card card">
             <view class="tip-dot"></view>
             <text class="tip-text">{{ tip }}</text>
           </view>
+        </view>
+        <view v-if="destination.tips.length > 3" class="list-toggle-inline" @tap="tipsExpanded = !tipsExpanded">
+          {{ tipsExpanded ? '收起建议' : `查看更多建议 ${destination.tips.length} 条` }}
         </view>
         <view class="suggestion-box">
           <text class="suggestion-title">路线建议</text>
@@ -227,22 +310,34 @@
       </view>
 
       <view class="section section-block">
-        <text class="section-title">抖音直播参考</text>
-        <view class="live-card card">
-          <view class="live-preview">
-            <CachedImage :src="destination.image" image-class="cover-image" />
-            <view class="live-badge">
-              <view class="live-dot"></view>
-              <text>DY</text>
-            </view>
+        <view class="section-head-row">
+          <text class="section-title">抖音直播参考</text>
+          <view class="section-toggle-chip" @tap="mediaExpanded = !mediaExpanded">
+            {{ mediaExpanded ? '收起' : '展开' }}
           </view>
-          <view class="live-body">
-            <text class="live-title">{{ destination.liveTitle }}</text>
-            <text class="live-hint muted-text">{{ destination.liveHint }}</text>
-            <text class="live-keyword">搜索词：{{ destination.liveKeyword }}</text>
-            <view class="live-actions one-col">
-              <view class="primary-btn" @tap="openDouyinSearch">跳转抖音搜索</view>
-              <view class="secondary-btn" @tap="copyKeyword">复制搜索词</view>
+        </view>
+        <view class="live-card card">
+          <view class="live-preview-compact" @tap="mediaExpanded = !mediaExpanded">
+            <view>
+              <text class="live-title">{{ destination.liveTitle }}</text>
+              <text class="live-hint muted-text">{{ destination.liveHint }}</text>
+            </view>
+            <view class="section-toggle-chip compact-chip">{{ mediaExpanded ? '隐藏' : '查看' }}</view>
+          </view>
+          <view v-if="mediaExpanded" class="live-expanded-content">
+            <view class="live-preview">
+              <CachedImage :src="destination.image" image-class="cover-image" />
+              <view class="live-badge">
+                <view class="live-dot"></view>
+                <text>DY</text>
+              </view>
+            </view>
+            <view class="live-body">
+              <text class="live-keyword">搜索词：{{ destination.liveKeyword }}</text>
+              <view class="live-actions one-col">
+                <view class="primary-btn" @tap="openDouyinSearch">跳转抖音搜索</view>
+                <view class="secondary-btn" @tap="copyKeyword">复制搜索词</view>
+              </view>
             </view>
           </view>
         </view>
@@ -262,9 +357,10 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import CachedImage from '../../components/CachedImage.vue'
-import { getDestinationById, getDestinationCulture, getDestinationSafetyMap, getDestinationTravelMeta, getDestinationVisitMeta, getDouyinSearchUrl } from '../../common/destination-data'
+import { getDestinationById, getDestinationCulture, getDestinationSafetyMap, getDestinationTravelMeta, getDestinationVisitMeta, getDouyinAppSearchUrls, getDouyinSearchUrl } from '../../common/destination-data'
 import { deleteOfflineMap, downloadOfflineMap, getOfflineMapRecord } from '../../common/offline-map'
-import { getCurrentLocation, getDrivingRoute, getLiveWeather, getStaticMapUrl, getWalkingRoute, reverseGeocode } from '../../services/amap'
+import { getCurrentLocation, getDrivingRoute, getLiveWeather, getStaticMapUrl, getWalkingRoute, resolveNavigationPoint, reverseGeocode } from '../../services/amap'
+import { getRelatedGuidesForDestination } from '../../services/guides'
 import { hasAmapKey } from '../../config/amap'
 
 const routeModeOptions = [
@@ -290,7 +386,7 @@ const destinationVisitMeta = computed(() => getDestinationVisitMeta(currentId.va
   openHours: '',
 })
 const destinationSafetyMap = computed(() => getDestinationSafetyMap(currentId.value) || {
-  title: '景区安全图',
+  title: '景区导览攻略图',
   zoom: 14,
   coverage: '主入口与核心游线',
   emergencyLevel: '中',
@@ -312,6 +408,19 @@ const liveWeatherData = ref(null)
 const weatherError = ref('')
 const offlineMapRecord = ref(null)
 const offlineMapBusy = ref(false)
+const relatedGuides = ref([])
+const relatedGuidesLoading = ref(false)
+const relatedGuidesError = ref('')
+const introExpanded = ref(false)
+const tipsExpanded = ref(false)
+const mediaExpanded = ref(false)
+const showAllRelatedGuides = ref(false)
+const guideExpanded = ref(false)
+const guideImageCandidateIndex = ref(0)
+const guideImageUnavailable = ref(false)
+
+const relatedGuidesVisible = computed(() => relatedGuidesLoading.value || relatedGuides.value.length > 0 || Boolean(relatedGuidesError.value))
+const hasExtendedCulture = computed(() => Boolean(destinationCulture.value?.history || destinationCulture.value?.highlights))
 
 const liveWeather = computed(() => {
   if (liveWeatherData.value) {
@@ -386,26 +495,48 @@ const mapImageUrl = computed(() => {
   })
 })
 
-const safetyMapImageUrl = computed(() => {
-  const coords = destination.value?.coordinates
-  if (!coords) {
+const safetyGuidePreviewUrl = computed(() => String(destinationSafetyMap.value?.guideMapImage || '').trim())
+
+const guidePreviewCandidates = computed(() => {
+  const base = String(destinationSafetyMap.value?.guideMapImage || '').trim()
+  if (!base) {
+    return []
+  }
+
+  const candidates = [base]
+  if (/\.jpg$/i.test(base)) {
+    candidates.push(`${base}.jpg`)
+    candidates.push(base.replace(/\.jpg$/i, '.png'))
+    candidates.push(base.replace(/\.jpg$/i, '.jpeg'))
+  } else if (/\.png$/i.test(base)) {
+    candidates.push(`${base}.png`)
+    candidates.push(base.replace(/\.png$/i, '.jpg'))
+    candidates.push(base.replace(/\.png$/i, '.jpeg'))
+  } else if (/\.jpeg$/i.test(base)) {
+    candidates.push(`${base}.jpeg`)
+    candidates.push(base.replace(/\.jpeg$/i, '.jpg'))
+    candidates.push(base.replace(/\.jpeg$/i, '.png'))
+  }
+
+  return Array.from(new Set(candidates))
+})
+
+const displayGuideImageUrl = computed(() => {
+  if (guideImageUnavailable.value) {
     return ''
   }
 
-  return getStaticMapUrl({
-    longitude: coords.longitude,
-    latitude: coords.latitude,
-    zoom: destinationSafetyMap.value.zoom,
-    size: '900*540',
-    markers: [
-      { longitude: coords.longitude, latitude: coords.latitude, label: '景', size: 'large' },
-    ],
-  })
+  if (hasOfflineMap.value && offlineMapRecord.value?.savedFilePath) {
+    return toDisplayPath(offlineMapRecord.value.savedFilePath)
+  }
+
+  const previewUrl = guidePreviewCandidates.value[guideImageCandidateIndex.value] || ''
+  return previewUrl ? toDisplayPath(previewUrl) : ''
 })
 
-const offlineMapVersion = computed(() => `map-${currentId.value || 'default'}-v2`)
+const offlineMapVersion = computed(() => `guide-${currentId.value || 'default'}-v3`)
 
-const offlineMapAvailable = computed(() => Boolean(safetyMapImageUrl.value))
+const offlineMapAvailable = computed(() => Boolean(safetyGuidePreviewUrl.value))
 
 const hasOfflineMap = computed(() => Boolean(offlineMapRecord.value?.savedFilePath))
 
@@ -414,12 +545,12 @@ const hasOfflineMapUpdate = computed(() => {
     return false
   }
 
-  return offlineMapRecord.value?.sourceUrl !== safetyMapImageUrl.value || offlineMapRecord.value?.version !== offlineMapVersion.value
+  return offlineMapRecord.value?.sourceUrl !== safetyGuidePreviewUrl.value || offlineMapRecord.value?.version !== offlineMapVersion.value
 })
 
 const offlineMapStatusText = computed(() => {
   if (offlineMapBusy.value) {
-    return '下载中'
+    return '保存中'
   }
 
   if (hasOfflineMapUpdate.value) {
@@ -427,14 +558,14 @@ const offlineMapStatusText = computed(() => {
   }
 
   if (hasOfflineMap.value) {
-    return '已下载'
+    return '已保存'
   }
 
-  return offlineMapAvailable.value ? '未下载' : '暂未提供'
+  return offlineMapAvailable.value ? '未保存' : '暂未提供'
 })
 
 const offlineMapSupportText = computed(() => {
-  return offlineMapAvailable.value ? '支持下载景区级离线安全图' : '当前景区暂未生成离线地图资源'
+  return offlineMapAvailable.value ? '支持保存景区导览图到本地' : '当前景区暂未提供离线导览图'
 })
 
 const offlineMapLocalText = computed(() => {
@@ -443,23 +574,47 @@ const offlineMapLocalText = computed(() => {
   }
 
   const timeText = formatDateTime(offlineMapRecord.value?.downloadedAt)
-  return timeText ? `已保存，下载于 ${timeText}` : '已保存到本地'
+  return timeText ? `已保存，处理于 ${timeText}` : '已保存到本地'
+})
+
+const offlineMapSupportShort = computed(() => offlineMapAvailable.value ? '支持离线' : '暂无离线')
+
+const offlineMapLocalStatusShort = computed(() => {
+  if (hasOfflineMap.value) {
+    return hasOfflineMapUpdate.value ? '已保存，可更新' : '已保存'
+  }
+  return offlineMapAvailable.value ? '未保存' : '暂未提供'
 })
 
 const offlineMapButtonText = computed(() => {
   if (offlineMapBusy.value) {
-    return '下载中...'
+    return '保存中...'
   }
 
   if (hasOfflineMapUpdate.value) {
-    return '更新离线地图'
+    return '更新离线导览图'
   }
 
   if (hasOfflineMap.value) {
-    return '重新下载离线地图'
+    return '重新保存离线导览图'
   }
 
-  return '下载离线地图'
+  return '保存离线导览图'
+})
+
+const visibleRelatedGuides = computed(() => {
+  if (showAllRelatedGuides.value) {
+    return relatedGuides.value
+  }
+  return relatedGuides.value.slice(0, 2)
+})
+
+const visibleDestinationTips = computed(() => {
+  const list = Array.isArray(destination.value?.tips) ? destination.value.tips : []
+  if (tipsExpanded.value) {
+    return list
+  }
+  return list.slice(0, 3)
 })
 
 const safetyTips = computed(() => {
@@ -470,7 +625,7 @@ const safetyTips = computed(() => {
   const tips = [
     {
       title: '弱网先备份',
-      desc: `出发前先下载 ${destination.value.name} 景区级离线安全图，优先保存主入口、返程口和游客中心位置。`,
+      desc: `出发前先保存 ${destination.value.name} 的离线导览图，弱网时直接看整张景区图，不依赖错误点位。`,
     },
     {
       title: '地形风险',
@@ -494,15 +649,50 @@ const safetyTips = computed(() => {
   return tips
 })
 
+const visibleSafetyTips = computed(() => {
+  if (guideExpanded.value) {
+    return safetyTips.value
+  }
+  return safetyTips.value.slice(0, 2)
+})
+
 onLoad(async (options) => {
   currentId.value = options?.id || ''
+  guideImageCandidateIndex.value = 0
+  guideImageUnavailable.value = false
   syncOfflineMapState()
-  await refreshLocationAndWeather()
+  await Promise.all([
+    refreshLocationAndWeather(),
+    loadRelatedGuides(),
+  ])
 })
 
 onShow(() => {
+  guideImageCandidateIndex.value = 0
+  guideImageUnavailable.value = false
   syncOfflineMapState()
+  loadRelatedGuides()
 })
+
+async function loadRelatedGuides() {
+  if (!destination.value) {
+    relatedGuides.value = []
+    relatedGuidesError.value = ''
+    return
+  }
+
+  relatedGuidesLoading.value = true
+  relatedGuidesError.value = ''
+
+  try {
+    relatedGuides.value = await getRelatedGuidesForDestination(destination.value, 3)
+  } catch (error) {
+    relatedGuides.value = []
+    relatedGuidesError.value = error?.message || '暂时无法加载相关攻略，请稍后重试。'
+  } finally {
+    relatedGuidesLoading.value = false
+  }
+}
 
 async function refreshLocationAndWeather() {
   if (!destination.value) {
@@ -622,6 +812,16 @@ function goBack() {
   uni.reLaunch({ url: '/pages/home/index' })
 }
 
+function openRelatedGuide(id) {
+  if (!id) {
+    return
+  }
+
+  uni.navigateTo({
+    url: `/pages/guide-detail/index?id=${encodeURIComponent(id)}`,
+  })
+}
+
 function syncOfflineMapState() {
   if (!currentId.value) {
     offlineMapRecord.value = null
@@ -629,6 +829,59 @@ function syncOfflineMapState() {
   }
 
   offlineMapRecord.value = getOfflineMapRecord(currentId.value)
+}
+
+function toDisplayPath(filePath) {
+  const raw = String(filePath || '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  if (/^(https?:|file:|content:|blob:|data:)/i.test(raw)) {
+    return raw
+  }
+
+  if (raw.startsWith('/static/') || raw.startsWith('static/')) {
+    return raw.startsWith('/') ? raw : `/${raw}`
+  }
+
+  if (typeof plus !== 'undefined' && plus.io && typeof plus.io.convertLocalFileSystemURL === 'function') {
+    const absolutePath = plus.io.convertLocalFileSystemURL(raw)
+    if (absolutePath) {
+      return absolutePath.startsWith('file://') ? absolutePath : `file://${absolutePath}`
+    }
+  }
+
+  return raw
+}
+
+function previewGuideImage() {
+  if (!displayGuideImageUrl.value) {
+    return
+  }
+
+  uni.previewImage({
+    current: displayGuideImageUrl.value,
+    urls: [displayGuideImageUrl.value],
+  })
+}
+
+function handleGuideImageError() {
+  if (hasOfflineMap.value && offlineMapRecord.value?.savedFilePath) {
+    guideImageUnavailable.value = true
+    return
+  }
+
+  if (guidePreviewCandidates.value.length && guideImageCandidateIndex.value < guidePreviewCandidates.value.length - 1) {
+    guideImageCandidateIndex.value += 1
+    return
+  }
+
+  guideImageUnavailable.value = true
+}
+
+function handleGuideImageLoad() {
+  guideImageUnavailable.value = false
 }
 
 async function handleOfflineMapDownload() {
@@ -642,7 +895,7 @@ async function handleOfflineMapDownload() {
     await downloadOfflineMap({
       destinationId: currentId.value,
       scenicName: destination.value.name,
-      mapUrl: safetyMapImageUrl.value,
+      mapUrl: safetyGuidePreviewUrl.value,
       version: offlineMapVersion.value,
       metadata: destinationSafetyMap.value,
     })
@@ -650,13 +903,13 @@ async function handleOfflineMapDownload() {
     syncOfflineMapState()
 
     uni.showToast({
-      title: '离线地图已保存',
+      title: '离线导览图已保存',
       icon: 'none',
     })
   } catch (error) {
     uni.showModal({
-      title: '下载失败',
-      content: error.message || '离线地图下载失败，请稍后再试。',
+      title: '保存失败',
+      content: error.message || '离线导览图保存失败，请稍后再试。',
       showCancel: false,
     })
   } finally {
@@ -690,8 +943,8 @@ function deleteOfflineMapWithConfirm() {
   }
 
   uni.showModal({
-    title: '删除离线地图',
-    content: '确认删除当前景区已下载的离线地图吗？删除后需要重新下载。',
+    title: '删除离线导览图',
+    content: '确认删除当前景区已保存的离线导览图吗？删除后需要重新保存。',
     success: async ({ confirm }) => {
       if (!confirm) {
         return
@@ -700,7 +953,7 @@ function deleteOfflineMapWithConfirm() {
       await deleteOfflineMap(currentId.value)
       syncOfflineMapState()
       uni.showToast({
-        title: '已删除离线地图',
+        title: '已删除离线导览图',
         icon: 'none',
       })
     },
@@ -712,9 +965,24 @@ function openDouyinSearch() {
     return
   }
 
+  const keyword = destination.value.liveKeyword
   const url = getDouyinSearchUrl(destination.value.liveKeyword)
+  const appUrls = getDouyinAppSearchUrls(keyword)
+
   if (typeof plus !== 'undefined' && plus.runtime && plus.runtime.openURL) {
-    plus.runtime.openURL(url)
+    const [preferredAppUrl] = appUrls
+    if (preferredAppUrl) {
+      plus.runtime.openURL(preferredAppUrl, () => {
+        plus.runtime.openURL(url, () => {
+          fallbackToCopyKeyword(keyword)
+        })
+      })
+      return
+    }
+
+    plus.runtime.openURL(url, () => {
+      fallbackToCopyKeyword(keyword)
+    })
     return
   }
 
@@ -724,12 +992,16 @@ function openDouyinSearch() {
     return
   }
 
+  fallbackToCopyKeyword(keyword)
+}
+
+function fallbackToCopyKeyword(keyword) {
   uni.setClipboardData({
-    data: destination.value.liveKeyword,
+    data: keyword,
     success: () => {
       uni.showModal({
         title: '已准备跳转',
-        content: '已复制抖音搜索词。当前端若不支持直接打开抖音，请手动粘贴搜索。',
+        content: '已优先尝试唤起抖音 App 搜索；如果当前设备未成功打开抖音，已帮你复制搜索词，可手动粘贴搜索。',
         showCancel: false,
       })
     },
@@ -748,31 +1020,61 @@ function copyKeyword() {
   })
 }
 
-function openScenicLocation() {
+async function openScenicLocation() {
   const coords = destination.value?.coordinates
   if (!coords) {
     return
   }
 
-  const amapUrl = `amapuri://route/plan/?dlat=${coords.latitude}&dlon=${coords.longitude}&dname=${encodeURIComponent(destination.value.name)}&dev=0&t=0`
+  const navigationName = destination.value.navigationName || destination.value.name
+  const navigationAddress = destination.value.navigationAddress || destination.value.location
+  let targetPoint = {
+    longitude: Number(coords.longitude),
+    latitude: Number(coords.latitude),
+    name: navigationName,
+    address: navigationAddress,
+  }
+
+  try {
+    const resolvedPoint = await resolveNavigationPoint({
+      name: navigationName,
+      address: navigationAddress,
+      region: destination.value.location,
+      longitude: coords.longitude,
+      latitude: coords.latitude,
+    })
+
+    if (resolvedPoint) {
+      targetPoint = {
+        longitude: resolvedPoint.longitude,
+        latitude: resolvedPoint.latitude,
+        name: resolvedPoint.name || navigationName,
+        address: resolvedPoint.address || navigationAddress,
+      }
+    }
+  } catch (error) {
+    console.warn('[destination-detail] resolve navigation point failed', error)
+  }
+
+  const amapUrl = `amapuri://navi?sourceApplication=${encodeURIComponent('丝路疆寻')}&lat=${targetPoint.latitude}&lon=${targetPoint.longitude}&dev=0&style=2&poiname=${encodeURIComponent(targetPoint.name)}`
 
   if (typeof plus !== 'undefined' && plus.runtime && plus.runtime.openURL) {
     plus.runtime.openURL(amapUrl, () => {
       uni.openLocation({
-        longitude: coords.longitude,
-        latitude: coords.latitude,
-        name: destination.value.name,
-        address: destination.value.location,
+        longitude: targetPoint.longitude,
+        latitude: targetPoint.latitude,
+        name: targetPoint.name,
+        address: targetPoint.address,
       })
     })
     return
   }
 
   uni.openLocation({
-    longitude: coords.longitude,
-    latitude: coords.latitude,
-    name: destination.value.name,
-    address: destination.value.location,
+    longitude: targetPoint.longitude,
+    latitude: targetPoint.latitude,
+    name: targetPoint.name,
+    address: targetPoint.address,
   })
 }
 
@@ -920,6 +1222,28 @@ function formatDateTime(timestamp) {
   margin-top: 36rpx;
 }
 
+.section-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.section-toggle-chip {
+  flex-shrink: 0;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(232, 168, 124, 0.16);
+  color: $theme-color;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.guide-chip,
+.compact-chip {
+  background: rgba(196, 69, 54, 0.12);
+}
+
 .story-card {
   margin-top: 24rpx;
   padding: 28rpx;
@@ -1007,10 +1331,103 @@ function formatDateTime(timestamp) {
 }
 
 .map-card,
-.weather-card,
-.safety-card {
+.safety-card,
+.related-guides-card {
   margin-top: 24rpx;
   padding: 28rpx;
+}
+
+.related-guides-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22rpx;
+}
+
+.related-guides-list {
+  margin-top: 22rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.list-toggle-inline {
+  margin-top: 6rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: $theme-color;
+}
+
+.related-guide-item {
+  display: flex;
+  gap: 18rpx;
+  padding: 18rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.1);
+}
+
+.related-guide-cover {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 22rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(232, 168, 124, 0.16);
+}
+
+.related-guide-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $theme-color;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.related-guide-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.related-guide-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 28rpx;
+  line-height: 1.5;
+  font-weight: 600;
+  color: $theme-text;
+}
+
+.related-guide-meta,
+.related-guide-summary,
+.related-guide-stat {
+  display: block;
+  font-size: 22rpx;
+  line-height: 1.7;
+}
+
+.related-guide-meta {
+  margin-top: 10rpx;
+}
+
+.related-guide-summary {
+  margin-top: 8rpx;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.related-guide-foot {
+  margin-top: 12rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-wrap: wrap;
 }
 
 .map-head,
@@ -1055,6 +1472,45 @@ function formatDateTime(timestamp) {
 
 .map-status.ready {
   background: rgba(196, 69, 54, 0.12);
+  color: $theme-color;
+}
+
+.travel-overview-grid {
+  margin-top: 22rpx;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.travel-overview-card {
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(232, 168, 124, 0.1);
+}
+
+.travel-overview-label {
+  display: block;
+  font-size: 22rpx;
+  color: $theme-muted;
+}
+
+.travel-overview-value {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 34rpx;
+  line-height: 1.2;
+  font-weight: 700;
+  color: $theme-text;
+}
+
+.travel-overview-sub {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.weather-emphasis {
   color: $theme-color;
 }
 
@@ -1173,6 +1629,10 @@ function formatDateTime(timestamp) {
   gap: 16rpx;
 }
 
+.travel-weather-note {
+  margin-top: 18rpx;
+}
+
 .safety-head {
   display: flex;
   align-items: flex-start;
@@ -1187,6 +1647,10 @@ function formatDateTime(timestamp) {
   margin-top: 22rpx;
 }
 
+.guide-detail-grid {
+  margin-top: 16rpx;
+}
+
 .safety-list {
   margin-top: 22rpx;
   display: flex;
@@ -1194,12 +1658,25 @@ function formatDateTime(timestamp) {
   gap: 16rpx;
 }
 
+.compact-safety-list {
+  gap: 12rpx;
+}
+
 .safety-map-preview {
-  position: relative;
   margin-top: 22rpx;
-  height: 360rpx;
+  position: relative;
+  height: 320rpx;
   border-radius: 28rpx;
   overflow: hidden;
+  background: rgba(232, 168, 124, 0.08);
+}
+
+.compact-grid {
+  margin-top: 16rpx;
+}
+
+.guide-preview-image {
+  background: #f8f3ee;
 }
 
 .safety-map-badge {
@@ -1211,40 +1688,6 @@ function formatDateTime(timestamp) {
   background: rgba(0, 0, 0, 0.52);
   color: #ffffff;
   font-size: 22rpx;
-}
-
-.compact-grid {
-  margin-top: 16rpx;
-}
-
-.safety-legend {
-  margin-top: 22rpx;
-  padding: 22rpx;
-  border-radius: 24rpx;
-  background: rgba(232, 168, 124, 0.12);
-}
-
-.safety-map-preview {
-  position: relative;
-  margin-top: 22rpx;
-  height: 360rpx;
-  border-radius: 28rpx;
-  overflow: hidden;
-}
-
-.safety-map-badge {
-  position: absolute;
-  left: 18rpx;
-  bottom: 18rpx;
-  padding: 10rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(0, 0, 0, 0.52);
-  color: #ffffff;
-  font-size: 22rpx;
-}
-
-.compact-grid {
-  margin-top: 16rpx;
 }
 
 .safety-legend {
@@ -1260,6 +1703,10 @@ function formatDateTime(timestamp) {
   background: rgba(232, 168, 124, 0.12);
 }
 
+.compact-safety-item {
+  padding: 18rpx 20rpx;
+}
+
 .safety-item-title {
   display: block;
   font-size: 26rpx;
@@ -1271,40 +1718,12 @@ function formatDateTime(timestamp) {
   margin-top: 10rpx;
 }
 
-.safety-actions {
-  grid-template-columns: 1fr;
+.guide-actions {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .live-actions.one-col {
   grid-template-columns: 1fr;
-}
-
-.weather-temp {
-  font-size: 68rpx;
-  font-weight: 700;
-  color: $theme-color;
-}
-
-.weather-texts {
-  flex: 1;
-}
-
-.weather-grid {
-  margin-top: 24rpx;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18rpx;
-}
-
-.weather-item {
-  padding: 20rpx;
-  border-radius: 24rpx;
-  background: rgba(232, 168, 124, 0.14);
-}
-
-.weather-value {
-  margin-top: 8rpx;
-  font-weight: 600;
 }
 
 .weather-note {
@@ -1365,6 +1784,18 @@ function formatDateTime(timestamp) {
 .live-card {
   margin-top: 24rpx;
   overflow: hidden;
+}
+
+.live-preview-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 26rpx;
+}
+
+.live-expanded-content {
+  border-top: 2rpx solid rgba(196, 69, 54, 0.08);
 }
 
 .live-preview {
@@ -1437,8 +1868,13 @@ function formatDateTime(timestamp) {
 }
 
 @media screen and (max-width: 720rpx) {
+  .travel-overview-grid,
   .offline-meta-grid {
     grid-template-columns: 1fr;
+  }
+
+  .section-head-row {
+    align-items: flex-start;
   }
 }
 </style>

@@ -4,7 +4,6 @@
       <view class="hero-gradient auth-banner section">
         <text class="auth-kicker">Account Center</text>
         <text class="auth-title">登录 / 注册</text>
-        <text class="auth-subtitle">先把账号体系接好，后续只需要填服务器地址和 PostgreSQL 配置就能连起来。</text>
       </view>
 
       <view class="section auth-panel-shell">
@@ -43,26 +42,9 @@
           <view class="submit-btn" :class="{ disabled: submitting }" @tap="submitAuth">
             {{ submitting ? '提交中...' : mode === 'login' ? '立即登录' : '创建账号' }}
           </view>
-
-          <text class="auth-note muted-text">接口已预留，后续把认证服务地址填到 `config/auth.js` 即可联调。</text>
         </view>
       </view>
 
-      <view class="section section-block">
-        <text class="section-title">当前预留接口</text>
-        <view class="card reserve-card">
-          <view class="reserve-row">
-            <text class="reserve-tag">POST</text>
-            <text class="reserve-path">/auth/register</text>
-          </view>
-          <text class="reserve-desc muted-text">注册账号，建议返回 `token`、`user`。</text>
-          <view class="reserve-row second">
-            <text class="reserve-tag">POST</text>
-            <text class="reserve-path">/auth/login</text>
-          </view>
-          <text class="reserve-desc muted-text">邮箱 + 密码登录，建议返回 `token`、`user`。</text>
-        </view>
-      </view>
 
       <view class="bottom-space"></view>
     </view>

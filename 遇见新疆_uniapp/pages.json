@@ -29,6 +29,13 @@
       }
     },
     {
+      "path": "pages/track-preview/index",
+      "style": {
+        "navigationBarTitleText": "轨迹大图",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/guide-publish/index",
       "style": {
         "navigationBarTitleText": "发布攻略",

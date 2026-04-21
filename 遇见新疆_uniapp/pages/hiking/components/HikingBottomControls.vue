@@ -37,12 +37,16 @@
         <text class="label">SOS</text>
       </view>
 
-      <view class="main-action">
-        <view class="btn-circle start" @tap="emit('toggle-track')" @longpress="handleFinishLongPress">
-          <text class="btn-text">{{ isTracking ? '暂停' : '开始' }}</text>
+        <view class="main-action">
+          <view
+            class="btn-circle start"
+            @tap="emit('toggle-track')"
+            @longpress="handleFinishLongPress"
+          >
+            <text class="btn-text">{{ primaryTrackActionText }}</text>
+          </view>
+          <text class="main-action-tip">{{ primaryTrackHintText }}</text>
         </view>
-        <text class="main-action-tip">{{ isTracking ? '长按结束并保存' : '点击开始记录' }}</text>
-      </view>
 
       <view class="side-action">
         <view class="btn-circle shield" :class="{ active: isGuardMode }" @tap="emit('toggle-guard')">
@@ -53,12 +57,21 @@
     </view>
 
     <view class="secondary-actions">
-      <view
-        class="secondary-btn"
-        :class="{ disabled: !hasTrackPoints && !isTracking }"
-        @tap="handleClearTrack"
-      >
-        清空当前轨迹
+      <view class="secondary-actions-row">
+        <view
+          class="secondary-btn"
+          :class="{ disabled: !hasTrackPoints && !isTracking }"
+          @tap="handleClearTrack"
+        >
+          清空当前轨迹
+        </view>
+        <view
+          class="secondary-btn"
+          :class="{ disabled: offlinePackBusy }"
+          @tap="emit('offline-pack-action')"
+        >
+          {{ offlinePackActionText }}
+        </view>
       </view>
     </view>
   </view>
@@ -69,6 +82,10 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   isTracking: {
+    type: Boolean,
+    default: false,
+  },
+  hasTrackSession: {
     type: Boolean,
     default: false,
   },
@@ -88,9 +105,17 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  offlinePackActionText: {
+    type: String,
+    default: '下载离线底图',
+  },
+  offlinePackBusy: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message', 'finish-track', 'clear-track'])
+const emit = defineEmits(['toggle-track', 'toggle-guard', 'sos-message', 'finish-track', 'clear-track', 'sos-visibility-change', 'offline-pack-action'])
 
 const SHORT_ON_MS = 250
 const LONG_ON_MS = 750
@@ -104,15 +129,34 @@ const emergencySubtitle = computed(() => {
   const phones = props.emergencyContactPhones.join(' / ')
   return phones ? `${props.emergencyContactName} · ${phones}` : props.emergencyContactName
 })
+const primaryTrackActionText = computed(() => {
+  if (props.isTracking) {
+    return '暂停'
+  }
+  return props.hasTrackSession ? '继续' : '开始'
+})
+const primaryTrackHintText = computed(() => {
+  if (props.isTracking) {
+    return '点按暂停，长按结束保存'
+  }
+  return props.hasTrackSession ? '点按继续记录' : '点按开始记录'
+})
 
 let sosLoopToken = 0
 
 function toggleSosMenu() {
+  // #ifdef APP-PLUS
+  openNativeSosSheet()
+  return
+  // #endif
+
   isSosMenuOpen.value = !isSosMenuOpen.value
+  emit('sos-visibility-change', isSosMenuOpen.value)
 }
 
 function closeSosMenu() {
   isSosMenuOpen.value = false
+  emit('sos-visibility-change', false)
 }
 
 async function handleFlashlightAction() {
@@ -125,11 +169,30 @@ function handleSmsAction() {
   closeSosMenu()
 }
 
-function handleFinishLongPress() {
-  if (!props.isTracking) {
+function openNativeSosSheet() {
+  if (typeof plus === 'undefined' || !plus.nativeUI || typeof plus.nativeUI.actionSheet !== 'function') {
+    isSosMenuOpen.value = !isSosMenuOpen.value
+    emit('sos-visibility-change', isSosMenuOpen.value)
     return
   }
-  emit('finish-track')
+
+  plus.nativeUI.actionSheet({
+    title: '紧急呼救',
+    cancel: '取消',
+    buttons: [
+      { title: isSosFlashing.value ? '停止手电筒求救' : '手电筒求救' },
+      { title: '紧急短信' },
+    ],
+  }, async (event) => {
+    const index = Number(event?.index || 0)
+    if (index === 1) {
+      await handleFlashlightAction()
+      return
+    }
+    if (index === 2) {
+      handleSmsAction()
+    }
+  })
 }
 
 function handleClearTrack() {
@@ -138,6 +201,14 @@ function handleClearTrack() {
   }
 
   emit('clear-track')
+}
+
+function handleFinishLongPress() {
+  if (!props.hasTrackSession) {
+    return
+  }
+
+  emit('finish-track')
 }
 
 async function toggleSosFlash() {
@@ -436,12 +507,20 @@ onBeforeUnmount(() => {
 
 .secondary-actions {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 18rpx;
   margin-top: 24rpx;
 }
 
+.secondary-actions-row {
+  display: flex;
+  justify-content: center;
+  gap: 16rpx;
+}
+
 .secondary-btn {
-  min-width: 240rpx;
+  flex: 1;
+  min-width: 0;
   padding: 16rpx 28rpx;
   border-radius: 999rpx;
   text-align: center;

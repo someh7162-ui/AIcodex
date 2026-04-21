@@ -20,7 +20,10 @@
       :map-scale="mapScale"
       :map-polyline="amapMapPolyline"
       :map-markers="amapMapMarkers"
-      :map-mode-key="mapModeKey"
+      :map-mode-key="onlineMapModeKey"
+      :overlay-active="overlayActive"
+      @refresh="$emit('refresh')"
+      @recenter="$emit('recenter')"
     />
     <HikingTileMapCompat
       v-else-if="appOfflineMapReady"
@@ -29,26 +32,33 @@
       :map-scale="mapScale"
       :map-polyline="storeMapPolyline"
       :map-markers="storeMapMarkers"
-      :map-mode-key="mapModeKey"
+      :map-mode-key="offlineMapModeKey"
+      :offline-pack-id="offlinePackId"
     />
     <!-- #endif -->
 
     <view v-if="showMapPlaceholder" class="map-placeholder">
       <view class="map-fallback-copy">
-        <text class="fallback-title">等待定位中</text>
-        <text class="fallback-desc">已接入原生 GPS 定位与徒步地图桥接，获取到位置后会显示真实地图与轨迹。</text>
+        <text class="fallback-title">{{ mapPlaceholderTitle }}</text>
+        <text class="fallback-desc">{{ mapPlaceholderDesc }}</text>
       </view>
     </view>
 
-    <view class="map-tools">
-      <view class="zoom-group">
-        <view class="zoom-btn" @tap="$emit('zoom-in')">
-          <text class="zoom-symbol">+</text>
-        </view>
-        <view class="zoom-btn" @tap="$emit('zoom-out')">
-          <text class="zoom-symbol">-</text>
-        </view>
+    <view class="zoom-group">
+      <view class="zoom-btn" @tap="$emit('zoom-in')">
+        <text class="zoom-symbol">+</text>
       </view>
+      <view class="zoom-btn" @tap="$emit('zoom-out')">
+        <text class="zoom-symbol">-</text>
+      </view>
+    </view>
+
+    <view v-if="showOnlineRefresh" class="online-refresh-btn" @tap="$emit('refresh')">
+      <text class="online-refresh-icon">刷</text>
+      <text class="online-refresh-text">刷新位置</text>
+    </view>
+
+    <view class="map-tools">
       <view class="tool-btn" @tap="$emit('refresh')">
         <text class="icon">刷</text>
         <text class="text">定位刷新</text>
@@ -77,6 +87,7 @@ import HikingTileMapCompat from './HikingTileMapCompat.vue'
 // #endif
 import { storeToRefs } from 'pinia'
 import { wgs84ToGcj02 } from '../../../common/coord-transform'
+import { getOfflineTilePack, getOfflineTilePackSummary } from '../../../common/offline-tile-packs'
 import { hasAmapKey } from '../../../config/amap'
 import { useHikingStore } from '../../../stores/useHikingStore'
 
@@ -97,6 +108,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  overlayActive: {
+    type: Boolean,
+    default: false,
+  },
+  offlinePackId: {
+    type: String,
+    default: '',
+  },
 })
 
 defineEmits(['refresh', 'recenter', 'toggle-track', 'zoom-in', 'zoom-out'])
@@ -113,13 +132,58 @@ const {
 const amapMapCenter = computed(() => convertPointToAmap(storeMapCenter.value))
 const amapMapPolyline = computed(() => convertPolylineToAmap(storeMapPolyline.value))
 const amapMapMarkers = computed(() => convertMarkersToAmap(storeMapMarkers.value))
+const onlineMapModeKey = computed(() => 'normal')
 const h5MapReady = computed(() => storeHasMapLocation.value && hasAmapKey())
+const offlinePackRecord = computed(() => getOfflineTilePack(props.offlinePackId))
+const offlinePackSummary = computed(() => getOfflineTilePackSummary(props.offlinePackId))
+const offlinePackReady = computed(() => offlinePackSummary.value.ready)
+const offlineMapModeKey = computed(() => {
+  const packMode = String(offlinePackRecord.value?.mode || '').toLowerCase()
+  if (packMode === 'imagery') {
+    return 'satellite'
+  }
+  if (packMode === 'terrain') {
+    return 'terrain'
+  }
+  if (packMode === 'vector') {
+    return 'normal'
+  }
+  return props.mapModeKey
+})
 const appOnlineMapReady = computed(() => {
   return storeHasMapLocation.value && !props.isOffline && hasAmapKey() && hasAppMapSupport()
 })
-const appOfflineMapReady = computed(() => storeHasMapLocation.value && hasOfflineMapSupport())
-const showMapPlaceholder = computed(() => !storeHasMapLocation.value || !hasRenderableMap())
+const appOfflineMapReady = computed(() => {
+  if (!storeHasMapLocation.value || !hasOfflineMapSupport()) {
+    return false
+  }
 
+  if (!props.isOffline) {
+    return true
+  }
+
+  return offlinePackReady.value
+})
+const showMapPlaceholder = computed(() => !storeHasMapLocation.value || !hasRenderableMap())
+const showOnlineRefresh = computed(() => h5MapReady.value)
+const mapPlaceholderTitle = computed(() => {
+  if (!storeHasMapLocation.value) {
+    return '等待定位中'
+  }
+  if (props.isOffline && !offlinePackReady.value) {
+    return '离线底图未准备'
+  }
+  return '地图暂不可用'
+})
+const mapPlaceholderDesc = computed(() => {
+  if (!storeHasMapLocation.value) {
+    return '已接入原生 GPS 定位与徒步地图桥接，获取到位置后会显示真实地图与轨迹。'
+  }
+  if (props.isOffline && !offlinePackReady.value) {
+    return props.offlineHint || '当前已经断网，但还没有下载离线底图，所以无法显示地图。请联网后先下载离线底图。'
+  }
+  return props.offlineHint || '当前地图暂时不可用，请稍后重试。'
+})
 function hasAppMapSupport() {
   // #ifdef APP-PLUS
   return typeof plus !== 'undefined' && Boolean(plus.webview)
@@ -129,7 +193,11 @@ function hasAppMapSupport() {
 }
 
 function hasOfflineMapSupport() {
+  // #ifdef APP-PLUS
   return true
+  // #endif
+
+  return false
 }
 
 function hasRenderableMap() {
@@ -270,6 +338,10 @@ function convertMarkersToAmap(markers) {
 }
 
 .zoom-group {
+  position: absolute;
+  left: 30rpx;
+  top: 30rpx;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -278,6 +350,37 @@ function convertMarkersToAmap(markers) {
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(10px);
+}
+
+.online-refresh-btn {
+  position: absolute;
+  left: 30rpx;
+  top: 230rpx;
+  z-index: 3;
+  min-width: 132rpx;
+  min-height: 96rpx;
+  padding: 0 20rpx;
+  border-radius: 24rpx;
+  background: rgba(44, 44, 46, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+}
+
+.online-refresh-icon {
+  font-size: 30rpx;
+  line-height: 1;
+  color: #fff;
+  font-weight: 700;
+}
+
+.online-refresh-text {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .zoom-btn {

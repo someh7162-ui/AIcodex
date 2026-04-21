@@ -18,6 +18,7 @@ export function normalizeLocation(location) {
     speed: Number(location.speed || 0),
     bearing: Number(location.bearing || location.heading || 0),
     timestamp: Number(location.timestamp || Date.now()),
+    segmentIndex: Number.isFinite(Number(location.segmentIndex)) ? Number(location.segmentIndex) : 0,
     provider: String(location.provider || location.sourceProvider || ''),
     source: String(location.source || ''),
     coordinateSystem: String(location.coordinateSystem || location.coordsType || ''),
@@ -61,7 +62,17 @@ export function sumTrackDistanceKm(points = []) {
 
   let total = 0
   for (let index = 1; index < points.length; index += 1) {
-    total += getDistanceKm(points[index - 1], points[index])
+    const previous = normalizeLocation(points[index - 1])
+    const current = normalizeLocation(points[index])
+    if (!previous || !current) {
+      continue
+    }
+
+    if (Number(previous.segmentIndex || 0) !== Number(current.segmentIndex || 0)) {
+      continue
+    }
+
+    total += getDistanceKm(previous, current)
   }
 
   return total
@@ -72,35 +83,61 @@ export function buildTrackPolyline(points = []) {
     return []
   }
 
-  return [
-    {
-      points: points
-        .map(normalizeLocation)
-        .filter(Boolean)
-        .map((item) => ({ latitude: item.latitude, longitude: item.longitude })),
+  const normalizedPoints = points.map(normalizeLocation).filter(Boolean)
+  const segments = []
+  let currentSegmentKey = null
+  let currentSegmentPoints = []
+
+  normalizedPoints.forEach((item) => {
+    const nextKey = Number(item.segmentIndex || 0)
+    if (currentSegmentKey === null || currentSegmentKey !== nextKey) {
+      if (currentSegmentPoints.length) {
+        segments.push(currentSegmentPoints)
+      }
+      currentSegmentKey = nextKey
+      currentSegmentPoints = []
+    }
+
+    currentSegmentPoints.push({ latitude: item.latitude, longitude: item.longitude })
+  })
+
+  if (currentSegmentPoints.length) {
+    segments.push(currentSegmentPoints)
+  }
+
+  return segments
+    .filter((segment) => segment.length)
+    .map((segment) => ({
+      points: segment,
       color: '#FF7A00',
       width: 5,
       borderColor: '#C14F00',
       borderWidth: 1,
-    },
-  ]
+    }))
 }
 
-export function buildCurrentMarker(location, isTracking = false) {
+export function buildCurrentMarker(location, isTracking = false, profile = {}) {
   const normalized = normalizeLocation(location)
   if (!normalized) {
     return []
   }
+
+  const avatarUrl = String(profile.avatarUrl || '').trim()
+  const avatarInitial = String(profile.avatarInitial || '游').trim().slice(0, 1) || '游'
+  const statusText = isTracking ? '记录中' : '当前位置'
 
   return [
     {
       id: 1,
       latitude: normalized.latitude,
       longitude: normalized.longitude,
-      width: 30,
-      height: 30,
+      width: 44,
+      height: 44,
+      avatarUrl,
+      avatarInitial,
+      statusText,
       callout: {
-        content: isTracking ? '记录中' : '当前位置',
+        content: statusText,
         display: 'ALWAYS',
         fontSize: 11,
         borderRadius: 12,

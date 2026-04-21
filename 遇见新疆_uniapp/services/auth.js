@@ -83,6 +83,12 @@ function authRequest(path, method, token, data) {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }
+    console.log('[auth-request] start', {
+      path,
+      method,
+      hasToken: Boolean(token),
+      payload: data,
+    })
     requestJson({
       url: `${AUTH_API_BASE_URL}${path}`,
       method,
@@ -91,12 +97,27 @@ function authRequest(path, method, token, data) {
       header: headers,
       data: method === 'GET' ? undefined : data,
     }).then((res) => {
+        console.log('[auth-request] response', {
+          path,
+          method,
+          statusCode: res?.statusCode,
+          data: res?.data,
+        })
         if (res.statusCode < 200 || res.statusCode >= 300) {
           reject(new Error(res.data?.message || `请求失败(${res.statusCode})`))
           return
         }
         resolve(normalizeResponseData(res.data || {}))
-      }).catch((error) => reject(new Error(error?.message || '无法连接服务器')))
+      }).catch((error) => {
+        console.error('[auth-request] fail', {
+          path,
+          method,
+          error,
+          errMsg: error?.errMsg,
+          message: error?.message,
+        })
+        reject(new Error(error?.message || '无法连接服务器'))
+      })
   })
 }
 

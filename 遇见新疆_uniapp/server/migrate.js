@@ -11,15 +11,15 @@ const pool = new Pool({
 })
 
 async function run() {
-  const schema = fs.readFileSync(path.join(__dirname, '../../postgresql-app-schema.sql'), 'utf8')
-  const seed = fs.readFileSync(path.join(__dirname, '../../postgresql-app-seed.sql'), 'utf8')
+  const schema = fs.readFileSync(path.join(__dirname, '../docs/postgresql-app-schema.sql'), 'utf8')
+  const seed = fs.readFileSync(path.join(__dirname, '../docs/postgresql-app-seed.sql'), 'utf8')
 
   console.log('Running schema...')
   await pool.query(schema)
   console.log('Schema OK')
 
   console.log('Clearing existing data...')
-  await pool.query('TRUNCATE guides, guide_sections, destinations CASCADE')
+  await pool.query('TRUNCATE guides, guide_sections, destinations, user_hiking_tracks CASCADE')
   console.log('Running seed...')
   await pool.query(seed)
   console.log('Seed OK')

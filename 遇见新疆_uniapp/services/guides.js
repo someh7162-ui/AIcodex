@@ -54,6 +54,7 @@ function normalizeGuideEntity(item) {
 
   return {
     ...item,
+    destinationId: item.destinationId ? Number(item.destinationId) : null,
     image: normalizeApiAssetUrl(item.image),
     images: Array.isArray(item.images) ? item.images.map(normalizeApiAssetUrl).filter(Boolean) : [],
     authorAvatar: normalizeApiAssetUrl(item.authorAvatar),
@@ -132,6 +133,72 @@ export async function getGuideFeed(params = {}) {
 
   const data = await request('GET', '/guides', params)
   return Array.isArray(data?.list) ? data.list.map(normalizeGuideEntity) : []
+}
+
+function normalizeSearchToken(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_/()（）【】\[\]、,，.。:：·]+/g, '')
+}
+
+function scoreGuideAgainstDestination(guide = {}, destination = {}) {
+  const destinationName = normalizeSearchToken(destination.name)
+  const haystacks = {
+    title: normalizeSearchToken(guide.title),
+    location: normalizeSearchToken([guide.location, guide.locationTag].filter(Boolean).join(' ')),
+    excerpt: normalizeSearchToken([guide.excerpt, guide.summaryText].filter(Boolean).join(' ')),
+    highlights: normalizeSearchToken(Array.isArray(guide.highlights) ? guide.highlights.join(' ') : ''),
+  }
+
+  let score = 0
+
+  if (destinationName && haystacks.title.includes(destinationName)) {
+    score += 10
+  }
+
+  if (destinationName && haystacks.location.includes(destinationName)) {
+    score += 8
+  }
+
+  if (destinationName && haystacks.excerpt.includes(destinationName)) {
+    score += 6
+  }
+
+  if (destinationName && haystacks.highlights.includes(destinationName)) {
+    score += 5
+  }
+
+  return score
+}
+
+export async function getRelatedGuidesForDestination(destination, limit = 3) {
+  if (!destination?.name) {
+    return []
+  }
+
+  if (destination.id) {
+    const exactMatches = await getGuideFeed({ destinationId: destination.id })
+    if (exactMatches.length) {
+      return exactMatches.slice(0, Math.max(1, Number(limit) || 3))
+    }
+  }
+
+  const guides = await getGuideFeed()
+  return guides
+    .map((guide) => ({
+      ...guide,
+      _relatedScore: scoreGuideAgainstDestination(guide, destination),
+    }))
+    .filter((guide) => guide._relatedScore >= 6)
+    .sort((a, b) => {
+      if (b._relatedScore !== a._relatedScore) {
+        return b._relatedScore - a._relatedScore
+      }
+      return String(b.publishDate || '').localeCompare(String(a.publishDate || ''))
+    })
+    .slice(0, Math.max(1, Number(limit) || 3))
+    .map(({ _relatedScore, ...guide }) => guide)
 }
 
 export async function getGuideDetail(id) {

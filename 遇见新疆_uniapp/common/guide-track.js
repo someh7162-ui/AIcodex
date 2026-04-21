@@ -19,10 +19,12 @@ export function normalizeGuideTrack(track) {
   const durationMs = resolveTrackDuration(source.durationMs, startPoint, endPoint)
   const distanceKm = resolveTrackDistance(source.distanceKm, points)
   const altitudeGain = resolveAltitudeGain(source.altitudeGain, points)
+  const segmentCount = resolveSegmentCount(points)
 
   return {
     points,
     pointCount: Number(source.pointCount) || points.length,
+    segmentCount,
     startPoint,
     endPoint,
     distanceKm,
@@ -41,6 +43,7 @@ export function createGuideTrackPayload(points = [], extras = {}) {
   return {
     points: normalized.points,
     pointCount: normalized.pointCount,
+    segmentCount: normalized.segmentCount,
     distanceKm: normalized.distanceKm,
     durationMs: normalized.durationMs,
     altitudeGain: normalized.altitudeGain,
@@ -106,4 +109,18 @@ function resolveAltitudeGain(rawAltitudeGain, points) {
   }
 
   return totalGain
+}
+
+function resolveSegmentCount(points = []) {
+  if (!Array.isArray(points) || !points.length) {
+    return 0
+  }
+
+  const segmentKeys = new Set(
+    points
+      .map((item) => Number(item?.segmentIndex || 0))
+      .filter((item) => Number.isFinite(item))
+  )
+
+  return segmentKeys.size || 1
 }
