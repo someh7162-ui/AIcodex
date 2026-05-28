@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Hiking AMap</title>
+  <style>
+    html, body, #map {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, #18314c 0%, #0b1118 100%);
+      overflow: hidden;
+    }
+
+    .map-action-btn {
+      position: fixed;
+      left: 12px;
+      z-index: 9999;
+      min-width: 96px;
+      height: 44px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 14px;
+      background: rgba(44, 44, 46, 0.92);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .map-refresh-btn {
+      top: 98px;
+    }
+
+    .map-recenter-btn {
+      top: 150px;
+    }
+
+     .amap-logo,
+     .amap-copyright {
+       opacity: 0.72 !important;
+     }
+
+      .hiking-avatar-marker {
+        position: relative;
+        width: 52px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .hiking-avatar-marker .avatar-shell {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(135deg, #d97706, #f59e0b);
+        border: 3px solid rgba(255, 255, 255, 0.96);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .hiking-avatar-marker .avatar-photo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .hiking-avatar-marker .avatar-fallback {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fffdf8;
+      }
+
+      .hiking-avatar-marker .marker-pulse {
+        width: 14px;
+        height: 14px;
+        margin-top: -6px;
+        border-radius: 50%;
+        background: #ff7a00;
+        border: 3px solid rgba(255, 255, 255, 0.94);
+        box-shadow: 0 0 0 8px rgba(255, 122, 0, 0.18);
+      }
+
+      .hiking-avatar-marker .marker-badge {
+        margin-top: 8px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.9);
+        color: #fff;
+        font-size: 12px;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+      }
+
+   </style>
+</head>
+<body>
+  <div id="map"></div>
+  <button id="refreshBtn" class="map-action-btn map-refresh-btn" type="button">刷新位置</button>
+  <button id="recenterBtn" class="map-action-btn map-recenter-btn" type="button">回到当前位置</button>
+  <script>
+    (function () {
+      var map = null
+      var marker = null
+      var polylines = []
+      var pendingState = null
+      var currentViewport = null
+      var rawTrackSegments = []
+      var geolocation = null
+      var lastKnownLocation = null
+      var sdkReady = false
+      var sdkVersion = '1.4.15'
+      var amapKey = getQueryParam('key') || ''
+      var initialMode = getQueryParam('mode') || 'normal'
+      var securityJsCode = getQueryParam('securityJsCode') || ''
+      var hostWebviewId = getQueryParam('hostWebviewId') || ''
+      var refreshBridge = getQueryParam('refreshBridge') || ''
+      var recenterBridge = getQueryParam('recenterBridge') || ''
+      var refreshEvent = getQueryParam('refreshEvent') || ''
+      var recenterEvent = getQueryParam('recenterEvent') || ''
+      var trackRenderTimer = null
+      var EARTH_RADIUS_METERS = 6378137
+
+      function getQueryParam(name) {
+        var search = String(window.location.search || '').replace(/^\?/, '')
+        if (!search) {
+          return ''
+        }
+
+        var pairs = search.split('&')
+        for (var index = 0; index < pairs.length; index += 1) {
+          var parts = pairs[index].split('=')
+          if (decodeURIComponent(parts[0] || '') === name) {
+            return decodeURIComponent(parts[1] || '')
+          }
+        }
+
+        return ''
+      }
+
+      function createPoint(longitude, latitude) {
+        var lng = Number(longitude)
+        var lat = Number(latitude)
+        if (!Number.isFinite(lng) || !Number.isFinite(lat) || !window.AMap) {
+          return null
+        }
+        return new AMap.LngLat(lng, lat)
+      }
+
+      function normalizeTrackPoint(point) {
+        var longitude = Number(point && point.longitude)
+        var latitude = Number(point && point.latitude)
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+          return null
+        }
+
+        return {
+          longitude: longitude,
+          latitude: latitude,
+        }
+      }
+
+      function normalizeTrackSegment(segment) {
+        return Array.isArray(segment)
+          ? segment.map(normalizeTrackPoint).filter(Boolean)
+          : []
+      }
+
+      function normalizeTrackSegments(track) {
+        if (!Array.isArray(track) || !track.length) {
+          return []
+        }
+
+        if (track[0] && Number.isFinite(Number(track[0].longitude)) && Number.isFinite(Number(track[0].latitude))) {
+          var singleSegment = normalizeTrackSegment(track)
+          return singleSegment.length ? [singleSegment] : []
+        }
+
+        return track.map(normalizeTrackSegment).filter(function (segment) {
+          return segment.length
+        })
+      }
+
+      function buildLayers(mode) {
+        if (!window.AMap) {
+          return []
+        }
+
+        if (mode === 'normal') {
+          return [new AMap.TileLayer()]
+        }
+
+        return [
+          new AMap.TileLayer.Satellite(),
+          new AMap.TileLayer.RoadNet(),
+        ]
+      }
+
+      function ensureMap(state) {
+        if (map || !window.AMap) {
+          return
+        }
+
+        try {
+          map = new AMap.Map('map', {
+            zoom: Number(state.zoom || 16),
+            center: createPoint(state.longitude, state.latitude) || undefined,
+            viewMode: '2D',
+            mapStyle: 'amap://styles/normal',
+            layers: buildLayers(state.mode || initialMode),
+            resizeEnable: true,
+            rotateEnable: false,
+          })
+        } catch (err) {}
+      }
+
+      function updateLayers(mode) {
+        if (!map || !window.AMap) {
+          return
+        }
+
+        try {
+          if (typeof map.setLayers === 'function') {
+            map.setLayers(buildLayers(mode || initialMode))
+          }
+        } catch (err) {}
+      }
+
+      function updateMarker(state) {
+        var markers = Array.isArray(state.markers) ? state.markers : []
+        var firstMarker = markers[0] || state
+        var point = createPoint(firstMarker.longitude, firstMarker.latitude)
+        if (!point || !window.AMap || !map) {
+          return
+        }
+
+        if (!marker) {
+          marker = new AMap.Marker({
+            position: point,
+            anchor: 'top-left',
+            content: createMarkerContent(firstMarker),
+            offset: new AMap.Pixel(-26, -53),
+          })
+          marker.setMap(map)
+          return
+        }
+
+        marker.setPosition(point)
+        if (typeof marker.setContent === 'function') {
+          marker.setContent(createMarkerContent(firstMarker))
+        }
+      }
+
+      function buildLiveMarkerState(longitude, latitude, sourceState) {
+        var baseState = sourceState || currentViewport || pendingState || {}
+        var markers = Array.isArray(baseState.markers) && baseState.markers.length
+          ? baseState.markers.slice(0, 1)
+          : [{}]
+        var firstMarker = Object.assign({}, markers[0], {
+          longitude: Number(longitude),
+          latitude: Number(latitude),
+          label: String(markers[0] && markers[0].label || '当前位置'),
+          statusText: String(markers[0] && (markers[0].statusText || markers[0].label) || '当前位置'),
+        })
+
+        return Object.assign({}, baseState, {
+          longitude: Number(longitude),
+          latitude: Number(latitude),
+          markers: [firstMarker],
+        })
+      }
+
+      function createMarkerContent(markerLike) {
+        var avatarUrl = escapeHtml(String(markerLike && markerLike.avatarUrl || ''))
+        var avatarInitial = escapeHtml(String(markerLike && markerLike.avatarInitial || '游').slice(0, 1) || '游')
+        var statusText = escapeHtml(String(markerLike && (markerLike.statusText || markerLike.label) || '当前位置'))
+        var avatarNode = avatarUrl
+          ? '<img class="avatar-photo" src="' + avatarUrl + '" alt="avatar" />'
+          : '<span class="avatar-fallback">' + avatarInitial + '</span>'
+
+        return '<div class="hiking-avatar-marker"><div class="avatar-shell">' + avatarNode + '</div><div class="marker-pulse"></div><div class="marker-badge">' + statusText + '</div></div>'
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+      }
+
+      function scheduleTrackRender() {
+        if (trackRenderTimer) {
+          clearTimeout(trackRenderTimer)
+        }
+
+        trackRenderTimer = setTimeout(function () {
+          trackRenderTimer = null
+          renderTrack()
+        }, 16)
+      }
+
+      function renderTrack() {
+        var simplifiedSegments = rawTrackSegments
+          .map(function (segment) {
+            return simplifyTrackPoints(segment, currentViewport && currentViewport.zoom)
+          })
+          .filter(function (segment) {
+            return Array.isArray(segment) && segment.length
+          })
+
+        if (!simplifiedSegments.length) {
+          polylines.forEach(function (item) {
+            item.setMap(null)
+          })
+          polylines = []
+          console.log('[hiking-map-render] empty track render', {
+            rawSegmentCount: rawTrackSegments.length,
+          })
+          return
+        }
+
+        console.log('[hiking-map-render] render track', {
+          rawSegmentCount: rawTrackSegments.length,
+          rawPointCount: rawTrackSegments.reduce(function (total, segment) {
+            return total + (Array.isArray(segment) ? segment.length : 0)
+          }, 0),
+          renderedSegmentCount: simplifiedSegments.length,
+          renderedPointCount: simplifiedSegments.reduce(function (total, segment) {
+            return total + segment.length
+          }, 0),
+          zoom: currentViewport && currentViewport.zoom,
+        })
+
+        while (polylines.length > simplifiedSegments.length) {
+          var removed = polylines.pop()
+          if (removed) {
+            removed.setMap(null)
+          }
+        }
+
+        simplifiedSegments.forEach(function (segment, index) {
+          var points = segment.map(function (item) {
+            return createPoint(item.longitude, item.latitude)
+          }).filter(Boolean)
+
+          if (!points.length) {
+            return
+          }
+
+          if (!polylines[index]) {
+            polylines[index] = new AMap.Polyline({
+              path: points,
+              strokeColor: '#ff7a00',
+              strokeWeight: 5,
+              outlineColor: '#c14f00',
+              borderWeight: 1,
+              lineJoin: 'round',
+              lineCap: 'round',
+            })
+            polylines[index].setMap(map)
+            return
+          }
+
+          polylines[index].setPath(points)
+        })
+      }
+
+      function applyViewport(viewport) {
+        currentViewport = normalizeViewport(viewport || currentViewport || {})
+        pendingState = currentViewport
+
+        if (!sdkReady || !window.AMap) {
+          return
+        }
+
+        ensureMap(currentViewport)
+        if (!map) {
+          return
+        }
+
+        updateLayers(currentViewport.mode || initialMode)
+
+        var point = createPoint(currentViewport.longitude, currentViewport.latitude)
+        if (point) {
+          try {
+            map.setZoomAndCenter(Number(currentViewport.zoom || 16), point)
+          } catch (err) {}
+        }
+
+        updateMarker(currentViewport)
+      }
+
+      function normalizeViewport(state) {
+        return {
+          longitude: Number(state.longitude || 0),
+          latitude: Number(state.latitude || 0),
+          zoom: Number(state.zoom || 16),
+          mode: state.mode || initialMode,
+          markers: Array.isArray(state.markers) ? state.markers.map(normalizeMarker).filter(Boolean) : [],
+        }
+      }
+
+      function normalizeMarker(markerLike) {
+        var point = normalizeTrackPoint(markerLike)
+        if (!point) {
+          return null
+        }
+
+        return {
+          longitude: point.longitude,
+          latitude: point.latitude,
+          label: String(markerLike && markerLike.label || ''),
+          avatarUrl: String(markerLike && markerLike.avatarUrl || ''),
+          avatarInitial: String(markerLike && markerLike.avatarInitial || '游').slice(0, 1) || '游',
+          statusText: String(markerLike && (markerLike.statusText || markerLike.label) || '当前位置'),
+        }
+      }
+
+      function initMapState(state) {
+        var viewport = normalizeViewport(state || {})
+        rawTrackSegments = normalizeTrackSegments(state && state.track)
+        if (viewport.longitude && viewport.latitude) {
+          lastKnownLocation = {
+            longitude: viewport.longitude,
+            latitude: viewport.latitude,
+          }
+        }
+        applyViewport(viewport)
+        scheduleTrackRender()
+      }
+
+      function updateViewport(viewport) {
+        applyViewport(viewport)
+        scheduleTrackRender()
+      }
+
+      function replaceTrack(track) {
+        rawTrackSegments = normalizeTrackSegments(track)
+        scheduleTrackRender()
+      }
+
+      function appendTrackPoint(point) {
+        var normalized = normalizeTrackPoint(point)
+        if (!normalized) {
+          return
+        }
+        if (!rawTrackSegments.length) {
+          rawTrackSegments = [[]]
+        }
+        rawTrackSegments[rawTrackSegments.length - 1].push(normalized)
+        scheduleTrackRender()
+      }
+
+      function applyState(state) {
+        initMapState(state || pendingState || { zoom: 16, mode: initialMode })
+      }
+
+      function loadAmapSdk() {
+        if (!amapKey) {
+          return
+        }
+
+        if (securityJsCode) {
+          window._AMapSecurityConfig = Object.assign({}, window._AMapSecurityConfig || {}, {
+            securityJsCode: securityJsCode,
+          })
+        }
+
+        var script = document.createElement('script')
+        script.src = 'https://webapi.amap.com/maps?v=' + encodeURIComponent(sdkVersion) + '&key=' + encodeURIComponent(amapKey)
+        script.async = true
+        script.defer = true
+        script.onload = function () {
+          sdkReady = true
+          applyState(pendingState || { zoom: 16, mode: initialMode })
+          ensureGeolocation()
+        }
+        script.onerror = function () {}
+        document.head.appendChild(script)
+      }
+
+      function ensureGeolocation() {
+        if (!window.AMap || geolocation) {
+          return
+        }
+
+        try {
+          map && map.plugin(['AMap.Geolocation'], function () {
+            geolocation = new AMap.Geolocation({
+              enableHighAccuracy: true,
+              timeout: 10000,
+              convert: true,
+              showMarker: false,
+              showCircle: false,
+              panToLocation: false,
+              zoomToAccuracy: false,
+            })
+          })
+        } catch (error) {}
+      }
+
+      function setButtonBusy(button, busy, busyText, idleText) {
+        if (!button) {
+          return
+        }
+        button.disabled = Boolean(busy)
+        button.textContent = busy ? busyText : idleText
+        button.style.opacity = busy ? '0.72' : '1'
+      }
+
+      function showTemporaryButtonText(button, text, idleText) {
+        if (!button) {
+          return
+        }
+        button.textContent = text
+        setTimeout(function () {
+          if (!button.disabled) {
+            button.textContent = idleText
+          }
+        }, 1200)
+      }
+
+      function requestCurrentLocation(done) {
+        ensureGeolocation()
+        if (!geolocation || typeof geolocation.getCurrentPosition !== 'function') {
+          done(new Error('定位插件未就绪'))
+          return
+        }
+
+        try {
+          geolocation.getCurrentPosition(function (status, result) {
+            if (status !== 'complete' || !result || !result.position) {
+              done(new Error(result && result.message || '定位失败'))
+              return
+            }
+
+            var longitude = Number(result.position.lng)
+            var latitude = Number(result.position.lat)
+            if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+              done(new Error('定位坐标无效'))
+              return
+            }
+
+            lastKnownLocation = { longitude: longitude, latitude: latitude }
+            done(null, lastKnownLocation)
+          })
+        } catch (error) {
+          done(error)
+        }
+      }
+
+      function applyLiveLocation(location, zoom) {
+        if (!location) {
+          return
+        }
+
+        var nextState = buildLiveMarkerState(location.longitude, location.latitude, currentViewport)
+        if (Number.isFinite(zoom)) {
+          nextState.zoom = Number(zoom)
+        }
+        currentViewport = normalizeViewport(nextState)
+        pendingState = currentViewport
+        applyViewport(currentViewport)
+      }
+
+      function simplifyTrackPoints(points, zoom) {
+        if (!Array.isArray(points) || points.length <= 2) {
+          return Array.isArray(points) ? points.slice() : []
+        }
+
+        if (points.length <= 24) {
+          return points.slice()
+        }
+
+        var filtered = filterNearbyPoints(points, resolveMinDistanceMeters(zoom))
+        if (filtered.length <= 2) {
+          return filtered
+        }
+
+        return douglasPeucker(filtered, resolveToleranceMeters(zoom))
+      }
+
+      function filterNearbyPoints(points, minDistanceMeters) {
+        if (points.length <= 2 || minDistanceMeters <= 0) {
+          return points.slice()
+        }
+
+        var filtered = [points[0]]
+        for (var index = 1; index < points.length - 1; index += 1) {
+          if (getDistanceMeters(filtered[filtered.length - 1], points[index]) >= minDistanceMeters) {
+            filtered.push(points[index])
+          }
+        }
+        filtered.push(points[points.length - 1])
+        return filtered
+      }
+
+      function douglasPeucker(points, toleranceMeters) {
+        if (points.length <= 2 || toleranceMeters <= 0) {
+          return points.slice()
+        }
+
+        var firstPoint = points[0]
+        var lastPoint = points[points.length - 1]
+        var maxDistance = 0
+        var splitIndex = -1
+
+        for (var index = 1; index < points.length - 1; index += 1) {
+          var distance = getPerpendicularDistanceMeters(points[index], firstPoint, lastPoint)
+          if (distance > maxDistance) {
+            maxDistance = distance
+            splitIndex = index
+          }
+        }
+
+        if (maxDistance <= toleranceMeters || splitIndex === -1) {
+          return [firstPoint, lastPoint]
+        }
+
+        var left = douglasPeucker(points.slice(0, splitIndex + 1), toleranceMeters)
+        var right = douglasPeucker(points.slice(splitIndex), toleranceMeters)
+        return left.slice(0, -1).concat(right)
+      }
+
+      function getPerpendicularDistanceMeters(point, lineStart, lineEnd) {
+        var start = projectToMeters(lineStart)
+        var end = projectToMeters(lineEnd)
+        var target = projectToMeters(point)
+        var dx = end.x - start.x
+        var dy = end.y - start.y
+
+        if (Math.abs(dx) < 0.000001 && Math.abs(dy) < 0.000001) {
+          return Math.hypot(target.x - start.x, target.y - start.y)
+        }
+
+        var ratio = ((target.x - start.x) * dx + (target.y - start.y) * dy) / (dx * dx + dy * dy)
+        var projection = ratio <= 0
+          ? start
+          : ratio >= 1
+            ? end
+            : {
+                x: start.x + dx * ratio,
+                y: start.y + dy * ratio,
+              }
+
+        return Math.hypot(target.x - projection.x, target.y - projection.y)
+      }
+
+      function getDistanceMeters(from, to) {
+        var start = projectToMeters(from)
+        var end = projectToMeters(to)
+        return Math.hypot(end.x - start.x, end.y - start.y)
+      }
+
+      function projectToMeters(point) {
+        var longitude = Number(point && point.longitude || 0)
+        var latitude = clampLatitude(Number(point && point.latitude || 0))
+        var x = longitude * Math.PI * EARTH_RADIUS_METERS / 180
+        var y = Math.log(Math.tan(Math.PI / 4 + latitude * Math.PI / 360)) * EARTH_RADIUS_METERS
+        return { x: x, y: y }
+      }
+
+      function resolveToleranceMeters(zoom) {
+        var numericZoom = Math.round(Number(zoom || 16))
+        if (numericZoom >= 17) return 0.2
+        if (numericZoom >= 16) return 0.5
+        if (numericZoom >= 15) return 1
+        if (numericZoom >= 14) return 2
+        if (numericZoom >= 13) return 4
+        if (numericZoom >= 12) return 8
+        return 12
+      }
+
+      function resolveMinDistanceMeters(zoom) {
+        var numericZoom = Math.round(Number(zoom || 16))
+        if (numericZoom >= 17) return 0
+        if (numericZoom >= 16) return 0.2
+        if (numericZoom >= 15) return 0.5
+        if (numericZoom >= 14) return 1
+        if (numericZoom >= 13) return 2
+        return 3
+      }
+
+      function clampLatitude(value) {
+        return Math.max(-85.05112878, Math.min(85.05112878, value))
+      }
+
+      function triggerParentBridge(bridgeName, eventName) {
+        if ((!bridgeName && !eventName) || !window.plus || !plus.webview) {
+          return
+        }
+
+        try {
+          var hostWebview = null
+          if (hostWebviewId && typeof plus.webview.getWebviewById === 'function') {
+            hostWebview = plus.webview.getWebviewById(hostWebviewId)
+          }
+          if (!hostWebview && typeof plus.webview.currentWebview === 'function') {
+            var currentWebview = plus.webview.currentWebview()
+            hostWebview = currentWebview && typeof currentWebview.opener === 'function' ? currentWebview.opener() : null
+          }
+          if (!hostWebview || typeof hostWebview.evalJS !== 'function') {
+            return
+          }
+
+          var bridgeCode = bridgeName
+            ? '(function(){var fn = (typeof window !== "undefined" && window[' + JSON.stringify(bridgeName) + ']) || (typeof globalThis !== "undefined" && globalThis[' + JSON.stringify(bridgeName) + ']); if (typeof fn === "function") { fn(); return; }'
+            : '(function(){'
+          var eventCode = eventName
+            ? 'if (typeof uni !== "undefined" && typeof uni.$emit === "function") { uni.$emit(' + JSON.stringify(eventName) + '); return; }'
+            : ''
+          hostWebview.evalJS(bridgeCode + eventCode + '})()')
+        } catch (error) {}
+      }
+
+      var refreshBtn = document.getElementById('refreshBtn')
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+          showTemporaryButtonText(refreshBtn, '请求中', '刷新位置')
+          triggerParentBridge(refreshBridge, refreshEvent)
+        })
+      }
+
+      var recenterBtn = document.getElementById('recenterBtn')
+      if (recenterBtn) {
+        recenterBtn.addEventListener('click', function () {
+          showTemporaryButtonText(recenterBtn, '请求中', '回到当前位置')
+          triggerParentBridge(recenterBridge, recenterEvent)
+        })
+      }
+
+      window.initMapState = initMapState
+      window.updateViewport = updateViewport
+      window.replaceTrack = replaceTrack
+      window.appendTrackPoint = appendTrackPoint
+      window.updateMapState = function (state) {
+        initMapState(state || {})
+      }
+
+      loadAmapSdk()
+    })()
+  </script>
+</body>
+</html>

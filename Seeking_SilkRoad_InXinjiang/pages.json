@@ -1,0 +1,111 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "丝路疆寻",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/destinations/index",
+      "style": {
+        "navigationBarTitleText": "目的地",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/guides/index",
+      "style": {
+        "navigationBarTitleText": "攻略指南",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/guide-detail/index",
+      "style": {
+        "navigationBarTitleText": "攻略详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/track-preview/index",
+      "style": {
+        "navigationBarTitleText": "轨迹大图",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/guide-publish/index",
+      "style": {
+        "navigationBarTitleText": "发布攻略",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/ai-assistant/index",
+      "style": {
+        "navigationBarTitleText": "AI旅游助手",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/account/index",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/auth/index",
+      "style": {
+        "navigationBarTitleText": "登录注册",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/destination-detail/index",
+      "style": {
+        "navigationBarTitleText": "目的地详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/safety-map/index",
+      "style": {
+        "navigationBarTitleText": "景区安全图",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/hiking/index",
+      "style": {
+        "navigationBarTitleText": "徒步模式",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "丝路疆寻",
+    "navigationBarBackgroundColor": "#FAF8F5",
+    "backgroundColor": "#FAF8F5"
+  },
+	"condition" : { //模式配置，仅开发期间生效
+		"current": 0, //当前激活的模式(list 的索引项)
+		"list": [
+			{
+				"name": "", //模式名称
+				"path": "", //启动页面，必选
+				"query": "" //启动参数，在页面的onLoad函数里面得到
+			}
+		]
+	}
+}

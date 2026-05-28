@@ -1,0 +1,18 @@
+# Dependencies and generated output
+node_modules/
+unpackage/
+outputs/
+static/guide-maps.zip
+
+# Local runtime settings and secrets
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.pem
+
+# Editor and OS debris
+.DS_Store
+Thumbs.db
